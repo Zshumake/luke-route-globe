@@ -237,6 +237,22 @@
         document.addEventListener('DOMContentLoaded', () => {
             if (typeof Cesium !== 'undefined') {
                 console.log('✅ Cesium loaded successfully');
+                
+                // Disable Ion completely to prevent 401 errors
+                try {
+                    if (Cesium.Ion) {
+                        Cesium.Ion.defaultAccessToken = undefined;
+                        // Try to disable Ion entirely
+                        Object.defineProperty(Cesium.Ion, 'defaultAccessToken', {
+                            get: () => undefined,
+                            set: () => {},
+                            configurable: false
+                        });
+                    }
+                } catch (e) {
+                    console.log('Ion disable attempt:', e.message);
+                }
+                
                 window.routeGlobe = new RouteGlobe();
             } else {
                 console.error('❌ Cesium failed to load');
@@ -401,24 +417,44 @@
             async initializeCesiumGlobe() {
                 console.log('🚀 Initializing Cesium globe...');
                 
-                // Create basic Cesium viewer
-                this.viewer = new Cesium.Viewer('cesiumContainer', {
-                    homeButton: false,
-                    sceneModePicker: false,
-                    baseLayerPicker: false,
-                    navigationHelpButton: false,
-                    animation: false,
-                    timeline: false,
-                    fullscreenButton: false,
-                    geocoder: false
-                });
-                
-                // Set initial camera position (space view)
-                this.viewer.camera.setView({
-                    destination: Cesium.Cartesian3.fromDegrees(0, 0, 20000000), // 20,000km altitude
-                });
-                
-                console.log('✅ Cesium globe initialized');
+                try {
+                    // Create basic Cesium viewer with minimal options
+                    this.viewer = new Cesium.Viewer('cesiumContainer', {
+                        // UI controls
+                        homeButton: false,
+                        sceneModePicker: false,
+                        baseLayerPicker: false,
+                        navigationHelpButton: false,
+                        animation: false,
+                        timeline: false,
+                        fullscreenButton: false,
+                        geocoder: false,
+                        
+                        // Disable problematic features
+                        shouldAnimate: false,
+                        requestRenderMode: false, // Disable to avoid worker issues
+                        
+                        // Use basic terrain to avoid Ion
+                        terrainProvider: new Cesium.EllipsoidTerrainProvider()
+                    });
+                    
+                    // Force disable any Ion attempts
+                    if (this.viewer.scene && this.viewer.scene.globe) {
+                        // Use basic ellipsoid without Ion services
+                        console.log('🌍 Using basic ellipsoid terrain');
+                    }
+                    
+                    // Set initial camera position (space view)
+                    this.viewer.camera.setView({
+                        destination: Cesium.Cartesian3.fromDegrees(0, 0, 20000000), // 20,000km altitude
+                    });
+                    
+                    console.log('✅ Cesium globe initialized');
+                    
+                } catch (error) {
+                    console.error('Cesium initialization error:', error);
+                    throw error;
+                }
             }
 
             addRoutesToGlobe() {
