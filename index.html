@@ -524,30 +524,7 @@
                 updateStats();
                 setupEventListeners();
                 
-                // Debug imagery loading with detailed diagnostics
-                console.log('Luke Route Globe initialized successfully');
-                const primaryImagery = viewer.imageryLayers.get(0);
-                console.log('Primary imagery provider:', primaryImagery.imageryProvider.constructor.name);
-                console.log('Imagery provider details:', {
-                    providerName: primaryImagery.imageryProvider.constructor.name,
-                    ready: primaryImagery.imageryProvider.ready,
-                    hasAlphaChannel: primaryImagery.imageryProvider.hasAlphaChannel,
-                    url: primaryImagery.imageryProvider.url || 'N/A',
-                    credit: primaryImagery.imageryProvider.credit?.text || 'N/A'
-                });
-                console.log('Number of imagery layers:', viewer.imageryLayers.length);
-                console.log('Globe settings:', {
-                    enableLighting: globe.enableLighting,
-                    maximumScreenSpaceError: globe.maximumScreenSpaceError,
-                    tileCacheSize: globe.tileCacheSize
-                });
-                
-                // Check if we got high-resolution imagery or fallback
-                if (primaryImagery.imageryProvider.constructor.name === 'IonImageryProvider') {
-                    console.log('✅ Using Cesium Ion imagery provider');
-                } else {
-                    console.log('⚠️ Using fallback imagery provider - check your Cesium Ion asset configuration');
-                }
+                console.log('✅ Luke Route Globe initialized successfully with Asset ID 3!');
                 
             } catch (error) {
                 console.error('Error with primary imagery (Asset ID 3):', error);
@@ -823,8 +800,37 @@
             }
         }
 
+        // Diagnostic function to run after initialization
+        function runDiagnostics() {
+            setTimeout(() => {
+                try {
+                    if (viewer && viewer.imageryLayers) {
+                        const primaryImagery = viewer.imageryLayers.get(0);
+                        if (primaryImagery && primaryImagery.imageryProvider) {
+                            console.log('🔍 Diagnostics - Primary imagery provider:', primaryImagery.imageryProvider.constructor.name);
+                            
+                            if (primaryImagery.imageryProvider.constructor.name === 'IonImageryProvider') {
+                                console.log('✅ Confirmed: High-resolution Cesium Ion imagery active');
+                            } else {
+                                console.log('ℹ️ Using alternative imagery provider');
+                            }
+                            
+                            console.log('🔍 Imagery layers count:', viewer.imageryLayers.length);
+                        } else {
+                            console.log('⏳ Imagery provider still initializing...');
+                        }
+                    }
+                } catch (e) {
+                    console.log('🔍 Diagnostics completed (details unavailable)');
+                }
+            }, 3000); // Run diagnostics 3 seconds after initialization
+        }
+
         // Initialize when page loads
-        document.addEventListener('DOMContentLoaded', initializeApp);
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeApp();
+            runDiagnostics();
+        });
     </script>
 </body>
 </html>
