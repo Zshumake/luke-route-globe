@@ -3,575 +3,725 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌍 Luke's Athletic Route Globe</title>
+    <title>🌍 Luke's Route Globe</title>
     
     <!-- Cesium.js -->
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Cesium.js"></script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
     
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+        }
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #fc4c02 0%, #ff6b35 50%, #f7931e 100%);
-            min-height: 100vh;
-            color: #1f2937;
-            overflow-x: hidden;
-        }
-
-        .header {
-            text-align: center;
-            padding: 30px 20px;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            margin: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-        }
-
-        .header h1 {
-            font-size: 2.5em;
-            color: #fc4c02;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .header p {
-            font-size: 1.2em;
-            color: #6b7280;
+            background: #1a1a2e;
+            color: white;
+            overflow: hidden;
         }
 
         .main-container {
             display: flex;
-            max-width: 1400px;
-            margin: 0 auto;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Sidebar for routes */
+        .sidebar {
+            width: 350px;
+            background: linear-gradient(180deg, #16213e 0%, #0f172a 100%);
+            border-right: 2px solid #334155;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 20px rgba(0,0,0,0.3);
+        }
+
+        .sidebar-header {
             padding: 20px;
-            gap: 30px;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            text-align: center;
         }
 
-        .left-panel {
-            flex: 1;
-            max-width: 350px;
+        .sidebar-header h1 {
+            font-size: 1.8em;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
 
-        .right-panel {
-            flex: 2;
-            min-height: 600px;
+        .sidebar-header p {
+            font-size: 0.9em;
+            opacity: 0.9;
         }
 
-        .controls-card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 25px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+        .route-controls {
+            padding: 20px;
+            border-bottom: 1px solid #334155;
         }
 
-        .controls-card h3 {
-            color: #fc4c02;
-            margin-bottom: 20px;
-            font-size: 1.3em;
-        }
-
-        .demo-button {
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #fc4c02 0%, #ff6b35 100%);
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-size: 1.1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
+        .filter-buttons {
+            display: flex;
+            gap: 8px;
             margin-bottom: 15px;
         }
 
-        .demo-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(252, 76, 2, 0.3);
+        .filter-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            background: #374151;
+            color: white;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.2s ease;
         }
 
+        .filter-btn:hover {
+            background: #4b5563;
+        }
+
+        .filter-btn.active {
+            background: #3b82f6;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .stat-item {
+            background: #1e293b;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            border: 1px solid #334155;
+        }
+
+        .stat-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #3b82f6;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+
+        .routes-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        .route-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #334155;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .route-item:hover {
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .route-item.active {
+            background: rgba(59, 130, 246, 0.2);
+            border-left: 4px solid #3b82f6;
+        }
+
+        .route-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .activity-icon {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .activity-icon.cycling {
+            background: #3b82f6;
+        }
+
+        .activity-icon.running {
+            background: #ef4444;
+        }
+
+        .route-details {
+            font-size: 0.85em;
+            opacity: 0.8;
+            line-height: 1.4;
+        }
+
+        .route-distance {
+            color: #60a5fa;
+            font-weight: 500;
+        }
+
+        /* Globe container */
         .globe-container {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            height: 600px;
+            flex: 1;
             position: relative;
         }
 
         #cesiumContainer {
             width: 100%;
             height: 100%;
-            border-radius: 15px;
-            overflow: hidden;
         }
 
-        .route-info {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 20px;
+        /* Loading screen */
+        .loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.5s ease;
         }
 
-        .route-list {
-            max-height: 200px;
-            overflow-y: auto;
+        .loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
         }
 
-        .route-item {
-            padding: 10px;
-            border-bottom: 1px solid #e5e7eb;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            border-radius: 8px;
-            margin-bottom: 5px;
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid #334155;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
         }
 
-        .route-item:hover {
-            background-color: #f3f4f6;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
-        .route-name {
-            font-weight: 600;
-            color: #374151;
+        .loading-text {
+            font-size: 1.1em;
+            color: #94a3b8;
         }
 
-        .route-details {
-            font-size: 0.9em;
-            color: #6b7280;
-            margin-top: 5px;
-        }
-
-        .run-route { border-left: 4px solid #ff5722; }
-        .ride-route { border-left: 4px solid #2196f3; }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
-            margin-top: 20px;
-        }
-
-        .stat-card {
-            text-align: center;
-            padding: 15px;
-            background: #f8fafc;
-            border-radius: 12px;
-            border: 2px solid #e2e8f0;
-        }
-
-        .stat-value {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #fc4c02;
-        }
-
-        .stat-label {
-            font-size: 0.9em;
-            color: #6b7280;
-            margin-top: 5px;
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: 40vh;
+            }
+            
+            .globe-container {
+                height: 60vh;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>🌍 Luke's Athletic Route Globe</h1>
-        <p>Explore your running and cycling adventures around the world</p>
-    </div>
-
     <div class="main-container">
-        <div class="left-panel">
-            <div class="controls-card">
-                <h3>🚀 Get Started</h3>
-                <button class="demo-button" id="demoBtn">
-                    Load Demo Routes
-                </button>
-                <p style="font-size: 0.9em; color: #6b7280; margin-top: 10px;">
-                    Click to see sample routes from Birmingham, NYC, London, and Sydney
-                </p>
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>🌍 Luke's Routes</h1>
+                <p>Explore athletic adventures worldwide</p>
             </div>
-
-            <div class="controls-card route-info">
-                <h3>📍 Your Routes</h3>
-                <div class="route-list" id="routeList">
-                    <p style="color: #9ca3af; text-align: center; padding: 20px;">
-                        Load demo routes to explore
-                    </p>
+            
+            <div class="route-controls">
+                <div class="filter-buttons">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn" data-filter="cycling">🚴‍♂️ Cycling</button>
+                    <button class="filter-btn" data-filter="running">🏃‍♂️ Running</button>
                 </div>
                 
-                <div class="stats-grid" id="statsGrid" style="display: none;">
-                    <div class="stat-card">
-                        <span class="stat-value" id="totalRoutes">0</span>
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalRoutes">0</div>
                         <div class="stat-label">Routes</div>
                     </div>
-                    <div class="stat-card">
-                        <span class="stat-value" id="totalDistance">0</span>
-                        <div class="stat-label">Miles</div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalDistance">0 km</div>
+                        <div class="stat-label">Distance</div>
                     </div>
-                    <div class="stat-card">
-                        <span class="stat-value" id="totalTime">0</span>
-                        <div class="stat-label">Hours</div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalTime">0h</div>
+                        <div class="stat-label">Time</div>
                     </div>
-                    <div class="stat-card">
-                        <span class="stat-value" id="countriesVisited">0</span>
+                    <div class="stat-item">
+                        <div class="stat-value" id="countries">0</div>
                         <div class="stat-label">Countries</div>
                     </div>
                 </div>
             </div>
+            
+            <div class="routes-list" id="routesList">
+                <!-- Routes will be populated here -->
+            </div>
         </div>
-
-        <div class="right-panel">
-            <div class="globe-container">
-                <div id="cesiumContainer"></div>
+        
+        <!-- Globe -->
+        <div class="globe-container">
+            <div id="cesiumContainer"></div>
+            
+            <div class="loading-screen" id="loadingScreen">
+                <div class="spinner"></div>
+                <div class="loading-text">Loading globe...</div>
             </div>
         </div>
     </div>
 
     <script>
-        // Initialize when page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            if (typeof Cesium !== 'undefined') {
-                console.log('✅ Cesium loaded successfully');
-                
-                // Disable Ion completely to prevent 401 errors
-                try {
-                    if (Cesium.Ion) {
-                        Cesium.Ion.defaultAccessToken = undefined;
-                        // Try to disable Ion entirely
-                        Object.defineProperty(Cesium.Ion, 'defaultAccessToken', {
-                            get: () => undefined,
-                            set: () => {},
-                            configurable: false
-                        });
-                    }
-                } catch (e) {
-                    console.log('Ion disable attempt:', e.message);
+        // Cesium configuration
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJjMjM3NTEzMi1mMDJmLTQyMDUtYjA5OC1jNmU0NDA3NDlmNWQiLCJpZCI6MzM2NzUyLCJpYXQiOjE3NTY1NTU2NzR9.AoxR_iV8YYTrhRnncxGBZQYyjfsaq5J2WckHrpB6wpA';
+
+        // Global variables
+        let viewer;
+        let routeEntities = [];
+        let currentFilter = 'all';
+        let sampleRoutes = [];
+
+        // Sample route data (will be replaced with Strava API)
+        const generateSampleRoutes = () => {
+            return [
+                {
+                    id: '1',
+                    name: 'Central Park Loop',
+                    type: 'running',
+                    distance: 10.5,
+                    time: 45,
+                    location: 'New York, NY',
+                    coordinates: [
+                        [-73.9583, 40.8021],
+                        [-73.9551, 40.7967],
+                        [-73.9497, 40.7851],
+                        [-73.9542, 40.7648],
+                        [-73.9721, 40.7489],
+                        [-73.9818, 40.7589],
+                        [-73.9792, 40.7731],
+                        [-73.9583, 40.8021]
+                    ]
+                },
+                {
+                    id: '2',
+                    name: 'Golden Gate Bridge Ride',
+                    type: 'cycling',
+                    distance: 25.2,
+                    time: 85,
+                    location: 'San Francisco, CA',
+                    coordinates: [
+                        [-122.4194, 37.7749],
+                        [-122.4286, 37.8199],
+                        [-122.4786, 37.8199],
+                        [-122.4786, 37.8099],
+                        [-122.4194, 37.7749]
+                    ]
+                },
+                {
+                    id: '3',
+                    name: 'Thames Path Run',
+                    type: 'running',
+                    distance: 15.8,
+                    time: 72,
+                    location: 'London, UK',
+                    coordinates: [
+                        [-0.1276, 51.5074],
+                        [-0.1031, 51.5074],
+                        [-0.0761, 51.5155],
+                        [-0.0278, 51.5074],
+                        [-0.1276, 51.5074]
+                    ]
                 }
+            ];
+        };
+
+        // Initialize the application
+        async function initializeApp() {
+            try {
+                sampleRoutes = generateSampleRoutes();
                 
-                window.routeGlobe = new RouteGlobe();
-            } else {
-                console.error('❌ Cesium failed to load');
-                document.getElementById('cesiumContainer').innerHTML = `
-                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #374151; text-align: center; padding: 20px;">
-                        <div>
-                            <h3>🌍 Loading Globe...</h3>
-                            <p style="margin: 15px 0;">Please wait while we initialize the 3D globe</p>
-                        </div>
-                    </div>
-                `;
-            }
-        });
-
-        class RouteGlobe {
-            constructor() {
-                this.viewer = null;
-                this.routes = [];
-                this.routeEntities = [];
-                this.init();
-            }
-
-            init() {
-                document.getElementById('demoBtn').addEventListener('click', () => {
-                    this.loadDemo();
+                // Initialize Cesium viewer with simplified, local-friendly settings
+                viewer = new Cesium.Viewer('cesiumContainer', {
+                    // Disable complex rendering for local development
+                    requestRenderMode: false, // Disable for local compatibility
+                    
+                    // Use Cesium Ion imagery with your token - this should work reliably
+                    imageryProvider: new Cesium.IonImageryProvider({ 
+                        assetId: 2, // Cesium World Imagery (satellite)
+                        accessToken: Cesium.Ion.defaultAccessToken
+                    }),
+                    
+                    // Use Cesium World Terrain
+                    terrainProvider: Cesium.Terrain.fromWorldTerrain(),
+                    
+                    // Disable unnecessary UI elements
+                    baseLayerPicker: false,
+                    fullscreenButton: false,
+                    geocoder: false,
+                    homeButton: false,
+                    sceneModePicker: false,
+                    selectionIndicator: false,
+                    timeline: false,
+                    navigationHelpButton: false,
+                    animation: false,
+                    creditContainer: document.createElement('div')
                 });
-            }
 
-            async loadDemo() {
-                try {
-                    console.log('🌍 Initializing Route Globe...');
-                    
-                    // Create realistic routes first
-                    this.routes = this.createRealisticRoutes();
-                    
-                    // Initialize Cesium globe
-                    await this.initializeCesiumGlobe();
-                    
-                    // Add routes to globe
-                    this.addRoutesToGlobe();
-                    
-                    // Update UI
-                    this.updateRouteList();
-                    this.updateStats();
-                    
-                    console.log('✅ Route Globe ready!');
-                    
-                } catch (error) {
-                    console.error('Error initializing route globe:', error);
-                    this.showError(error);
-                }
-            }
-
-            createRealisticRoutes() {
-                return [
-                    {
-                        name: "UAB Medical District Loop",
-                        type: "Run",
-                        distance: 3.2,
-                        duration: 28,
-                        location: "Birmingham, AL",
-                        country: "USA",
-                        coordinates: this.generateBirminghamRoute()
-                    },
-                    {
-                        name: "Central Park Loop",
-                        type: "Run", 
-                        distance: 6.1,
-                        duration: 52,
-                        location: "New York, NY",
-                        country: "USA",
-                        coordinates: this.generateNYCRoute()
-                    },
-                    {
-                        name: "Thames Path Ride",
-                        type: "Ride",
-                        distance: 15.3,
-                        duration: 72,
-                        location: "London, UK", 
-                        country: "UK",
-                        coordinates: this.generateLondonRoute()
-                    },
-                    {
-                        name: "Sydney Harbor Bridge Circuit",
-                        type: "Ride",
-                        distance: 22.8,
-                        duration: 108,
-                        location: "Sydney, Australia",
-                        country: "Australia", 
-                        coordinates: this.generateSydneyRoute()
+                // Try to add high-resolution Bing imagery as a secondary layer
+                setTimeout(async () => {
+                    try {
+                        const bingImagery = viewer.imageryLayers.addImageryProvider(
+                            await Cesium.BingMapsImageryProvider.fromUrl('https://dev.virtualearth.net', {
+                                key: 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf',
+                                mapStyle: Cesium.BingMapsStyle.AERIAL
+                            })
+                        );
+                        bingImagery.alpha = 0.8;
+                        console.log('Bing imagery added as overlay');
+                    } catch (e) {
+                        console.log('Bing imagery not available, using Cesium Ion only:', e);
                     }
-                ];
-            }
-
-            generateBirminghamRoute() {
-                const waypoints = [
-                    [-86.8066, 33.5022, 180], // UAB Campus
-                    [-86.8045, 33.5035, 185],
-                    [-86.8025, 33.5048, 190], 
-                    [-86.8010, 33.5055, 195],
-                    [-86.8000, 33.5045, 190],
-                    [-86.8015, 33.5030, 185],
-                    [-86.8040, 33.5015, 180],
-                    [-86.8055, 33.5008, 175],
-                    [-86.8066, 33.5022, 180]
-                ];
-                return this.interpolateRoute(waypoints, 50);
-            }
-
-            generateNYCRoute() {
-                const waypoints = [
-                    [-73.9712, 40.7831, 45], // Central Park West
-                    [-73.9581, 40.7831, 50], // East side
-                    [-73.9581, 40.7688, 55], // Southeast
-                    [-73.9712, 40.7688, 50], // Southwest  
-                    [-73.9712, 40.7831, 45]  // Back to start
-                ];
-                return this.interpolateRoute(waypoints, 80);
-            }
-
-            generateLondonRoute() {
-                const waypoints = [
-                    [-0.1276, 51.5074, 15], // Westminster
-                    [-0.0759, 51.5048, 20], // London Bridge
-                    [-0.0249, 51.4951, 25], // Canary Wharf
-                    [0.0103, 51.4814, 30],  // Greenwich
-                    [0.0249, 51.4706, 35]   // Beyond Greenwich
-                ];
-                return this.interpolateRoute(waypoints, 120);
-            }
-
-            generateSydneyRoute() {
-                const waypoints = [
-                    [151.2093, -33.8688, 25], // Sydney Opera House
-                    [151.2167, -33.8548, 30], // Harbor Bridge
-                    [151.2099, -33.8415, 35], // North Sydney
-                    [151.1957, -33.8559, 40], // Circular Quay area
-                    [151.2093, -33.8688, 25]  // Back to Opera House
-                ];
-                return this.interpolateRoute(waypoints, 150);
-            }
-
-            interpolateRoute(waypoints, numPoints) {
-                const coordinates = [];
-                for (let i = 0; i < waypoints.length - 1; i++) {
-                    const start = waypoints[i];
-                    const end = waypoints[i + 1]; 
-                    const segmentPoints = Math.floor(numPoints / (waypoints.length - 1));
-                    
-                    for (let j = 0; j < segmentPoints; j++) {
-                        const t = j / segmentPoints;
-                        const lng = start[0] + (end[0] - start[0]) * t;
-                        const lat = start[1] + (end[1] - start[1]) * t;
-                        const alt = start[2] + (end[2] - start[2]) * t;
-                        
-                        coordinates.push(lng, lat, alt);
-                    }
-                }
-                return coordinates;
-            }
-
-            async initializeCesiumGlobe() {
-                console.log('🚀 Initializing Cesium globe...');
+                }, 2000);
                 
+                // Configure the globe for better imagery
+                const globe = viewer.scene.globe;
+                globe.enableLighting = false;
+                globe.maximumScreenSpaceError = 2;
+                
+                // Configure scene
+                const scene = viewer.scene;
+                scene.fog.enabled = false;
+                scene.backgroundColor = Cesium.Color.BLACK;
+                
+                // Configure camera controls
+                const controller = scene.screenSpaceCameraController;
+                controller.minimumZoomDistance = 1.0;
+                controller.maximumZoomDistance = 50000000.0;
+                
+                // Set initial view
+                viewer.camera.setView({
+                    destination: Cesium.Cartesian3.fromDegrees(-98.5795, 39.8283, 15000000.0),
+                    orientation: {
+                        heading: 0.0,
+                        pitch: -1.57,
+                        roll: 0.0
+                    }
+                });
+
+                // Force initial render
+                viewer.scene.requestRender();
+
+                // Wait for globe to be ready
+                await new Promise((resolve) => {
+                    const removeCallback = globe.tileLoadProgressEvent.addEventListener((queuedTileCount) => {
+                        if (queuedTileCount === 0) {
+                            removeCallback();
+                            resolve();
+                        }
+                    });
+                });
+
+                // Hide loading screen after globe is ready
+                setTimeout(() => {
+                    document.getElementById('loadingScreen').classList.add('hidden');
+                    viewer.scene.requestRender(); // Ensure final render
+                }, 1000);
+
+                // Initialize UI
+                populateRoutesList();
+                updateStats();
+                setupEventListeners();
+                
+                // Debug imagery loading
+                console.log('Luke Route Globe initialized successfully');
+                console.log('Primary imagery provider:', viewer.imageryLayers.get(0).imageryProvider.constructor.name);
+                console.log('Number of imagery layers:', viewer.imageryLayers.length);
+                console.log('Globe settings:', {
+                    enableLighting: globe.enableLighting,
+                    maximumScreenSpaceError: globe.maximumScreenSpaceError,
+                    tileCacheSize: globe.tileCacheSize
+                });
+                
+            } catch (error) {
+                console.error('Error initializing app:', error);
+                
+                // Fallback to basic Cesium Ion imagery if Bing Maps fails
                 try {
-                    // Create basic Cesium viewer with minimal options
-                    this.viewer = new Cesium.Viewer('cesiumContainer', {
-                        // UI controls
-                        homeButton: false,
-                        sceneModePicker: false,
+                    console.log('Attempting fallback to Cesium Ion imagery...');
+                    viewer = new Cesium.Viewer('cesiumContainer', {
+                        imageryProvider: new Cesium.IonImageryProvider({ assetId: 2 }), // Cesium World Imagery
+                        terrainProvider: Cesium.Terrain.fromWorldTerrain(),
                         baseLayerPicker: false,
-                        navigationHelpButton: false,
-                        animation: false,
-                        timeline: false,
                         fullscreenButton: false,
                         geocoder: false,
-                        
-                        // Disable problematic features
-                        shouldAnimate: false,
-                        requestRenderMode: false, // Disable to avoid worker issues
-                        
-                        // Use basic terrain to avoid Ion
-                        terrainProvider: new Cesium.EllipsoidTerrainProvider()
+                        homeButton: false,
+                        sceneModePicker: false,
+                        selectionIndicator: false,
+                        timeline: false,
+                        navigationHelpButton: false,
+                        animation: false,
+                        creditContainer: document.createElement('div')
                     });
                     
-                    // Force disable any Ion attempts
-                    if (this.viewer.scene && this.viewer.scene.globe) {
-                        // Use basic ellipsoid without Ion services
-                        console.log('🌍 Using basic ellipsoid terrain');
-                    }
+                    // Basic globe configuration for fallback
+                    viewer.scene.globe.enableLighting = false;
+                    viewer.scene.fog.enabled = false;
                     
-                    // Set initial camera position (space view)
-                    this.viewer.camera.setView({
-                        destination: Cesium.Cartesian3.fromDegrees(0, 0, 20000000), // 20,000km altitude
-                    });
+                    document.getElementById('loadingScreen').classList.add('hidden');
+                    populateRoutesList();
+                    updateStats();
+                    setupEventListeners();
                     
-                    console.log('✅ Cesium globe initialized');
+                    console.log('Fallback imagery loaded successfully');
                     
-                } catch (error) {
-                    console.error('Cesium initialization error:', error);
-                    throw error;
+                } catch (fallbackError) {
+                    console.error('Fallback failed:', fallbackError);
+                    document.querySelector('.loading-text').textContent = 'Error loading globe. Please refresh the page.';
                 }
             }
+        }
 
-            addRoutesToGlobe() {
-                console.log('🗺️ Adding GPS routes to globe...');
+        // Populate the routes list
+        function populateRoutesList() {
+            const routesList = document.getElementById('routesList');
+            routesList.innerHTML = '';
+            
+            const filteredRoutes = sampleRoutes.filter(route => {
+                return currentFilter === 'all' || route.type === currentFilter;
+            });
+
+            filteredRoutes.forEach(route => {
+                const routeItem = document.createElement('div');
+                routeItem.className = 'route-item';
+                routeItem.dataset.routeId = route.id;
                 
-                this.routes.forEach(route => {
-                    try {
-                        // Create polyline for the route
-                        const entity = this.viewer.entities.add({
-                            name: route.name,
-                            polyline: {
-                                positions: Cesium.Cartesian3.fromDegreesArrayHeights(route.coordinates),
-                                width: route.type === 'Run' ? 4 : 6,
-                                material: route.type === 'Run' ? 
-                                    Cesium.Color.ORANGERED : 
-                                    Cesium.Color.DEEPSKYBLUE,
-                                clampToGround: true,
-                                outline: true,
-                                outlineColor: Cesium.Color.WHITE,
-                                outlineWidth: 1
-                            },
-                            // Add start point marker
-                            point: {
-                                pixelSize: 12,
-                                color: route.type === 'Run' ? Cesium.Color.ORANGERED : Cesium.Color.DEEPSKYBLUE,
-                                outlineColor: Cesium.Color.WHITE,
-                                outlineWidth: 2,
-                                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
-                            },
-                            position: Cesium.Cartesian3.fromDegreesArrayHeights(route.coordinates)[0]
-                        });
-                        
-                        // Store route data
-                        entity.routeData = route;
-                        this.routeEntities.push(entity);
-                        
-                        console.log(`✅ Added route: ${route.name}`);
-                        
-                    } catch (routeError) {
-                        console.error(`❌ Failed to add route ${route.name}:`, routeError);
+                routeItem.innerHTML = `
+                    <div class="route-name">
+                        <div class="activity-icon ${route.type}"></div>
+                        ${route.name}
+                    </div>
+                    <div class="route-details">
+                        📍 ${route.location}<br>
+                        📏 <span class="route-distance">${route.distance} km</span> • ⏱️ ${Math.floor(route.time/60)}h ${route.time%60}m
+                    </div>
+                `;
+                
+                routeItem.addEventListener('click', () => flyToRoute(route));
+                routesList.appendChild(routeItem);
+            });
+        }
+
+        // Fly to a specific route
+        function flyToRoute(route) {
+            // Remove active class from all route items
+            document.querySelectorAll('.route-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // Add active class to clicked route
+            document.querySelector(`[data-route-id="${route.id}"]`).classList.add('active');
+            
+            // Clear existing route entities
+            routeEntities.forEach(entity => viewer.entities.remove(entity));
+            routeEntities = [];
+            
+            // Create route polyline with enhanced styling
+            if (route.coordinates && route.coordinates.length > 0) {
+                const positions = route.coordinates.map(coord => 
+                    Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 2) // Slight elevation for visibility
+                );
+                
+                // Create main route line
+                const routeColor = route.type === 'cycling' ? 
+                    Cesium.Color.fromCssColorString('#3b82f6') : // Blue for cycling
+                    Cesium.Color.fromCssColorString('#ef4444');  // Red for running
+                
+                const routeEntity = viewer.entities.add({
+                    name: route.name,
+                    polyline: {
+                        positions: positions,
+                        width: 6,
+                        material: routeColor.withAlpha(0.9),
+                        clampToGround: true,
+                        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                        extrudedHeight: 0,
+                        classificationType: Cesium.ClassificationType.TERRAIN
                     }
                 });
                 
-                console.log(`✅ Added ${this.routeEntities.length} GPS routes to globe`);
-            }
-
-            updateRouteList() {
-                const routeList = document.getElementById('routeList');
-                
-                if (this.routes.length === 0) {
-                    routeList.innerHTML = '<p style="color: #9ca3af; text-align: center; padding: 20px;">No routes loaded</p>';
-                    return;
+                // Add start point marker
+                if (positions.length > 0) {
+                    const startPoint = viewer.entities.add({
+                        name: `${route.name} - Start`,
+                        position: positions[0],
+                        point: {
+                            pixelSize: 10,
+                            color: Cesium.Color.LIME,
+                            outlineColor: Cesium.Color.WHITE,
+                            outlineWidth: 2,
+                            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                        },
+                        label: {
+                            text: 'START',
+                            font: '12pt monospace',
+                            fillColor: Cesium.Color.WHITE,
+                            outlineColor: Cesium.Color.BLACK,
+                            outlineWidth: 2,
+                            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                            pixelOffset: new Cesium.Cartesian2(0, -40),
+                            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                        }
+                    });
+                    routeEntities.push(startPoint);
                 }
                 
-                const routeHTML = this.routes.map((route, index) => `
-                    <div class="route-item ${route.type.toLowerCase()}-route" onclick="routeGlobe.flyToRoute(${index})">
-                        <div class="route-name">${route.name}</div>
-                        <div class="route-details">
-                            ${route.type} • ${route.distance} mi • ${Math.floor(route.duration/60)}h ${route.duration%60}m • ${route.location}
-                        </div>
-                    </div>
-                `).join('');
-                
-                routeList.innerHTML = routeHTML;
-            }
-
-            updateStats() {
-                const statsGrid = document.getElementById('statsGrid');
-                if (this.routes.length > 0) {
-                    statsGrid.style.display = 'grid';
-                    
-                    const totalDistance = this.routes.reduce((sum, route) => sum + route.distance, 0);
-                    const totalTime = this.routes.reduce((sum, route) => sum + route.duration, 0);
-                    const countries = new Set(this.routes.map(route => route.country));
-                    
-                    document.getElementById('totalRoutes').textContent = this.routes.length;
-                    document.getElementById('totalDistance').textContent = totalDistance.toFixed(1);
-                    document.getElementById('totalTime').textContent = Math.round(totalTime / 60);
-                    document.getElementById('countriesVisited').textContent = countries.size;
-                }
-            }
-
-            flyToRoute(index) {
-                const route = this.routes[index];
-                if (!route) return;
-                
-                console.log(`🎯 Flying to route: ${route.name}`);
-                
-                // Get route bounds
-                const coords = [];
-                for (let i = 0; i < route.coordinates.length; i += 3) {
-                    coords.push(route.coordinates[i], route.coordinates[i + 1]);
+                // Add end point marker
+                if (positions.length > 1) {
+                    const endPoint = viewer.entities.add({
+                        name: `${route.name} - End`,
+                        position: positions[positions.length - 1],
+                        point: {
+                            pixelSize: 10,
+                            color: Cesium.Color.RED,
+                            outlineColor: Cesium.Color.WHITE,
+                            outlineWidth: 2,
+                            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                        },
+                        label: {
+                            text: 'END',
+                            font: '12pt monospace',
+                            fillColor: Cesium.Color.WHITE,
+                            outlineColor: Cesium.Color.BLACK,
+                            outlineWidth: 2,
+                            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                            pixelOffset: new Cesium.Cartesian2(0, -40),
+                            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                        }
+                    });
+                    routeEntities.push(endPoint);
                 }
                 
-                const positions = Cesium.Cartesian3.fromDegreesArray(coords);
+                routeEntities.push(routeEntity);
                 
-                this.viewer.camera.flyToBoundingSphere(
-                    Cesium.BoundingSphere.fromPoints(positions),
-                    {
-                        duration: 2.0,
-                        offset: new Cesium.HeadingPitchRange(0, -0.5, 10000)
-                    }
-                );
-            }
-
-            showError(error) {
-                document.getElementById('cesiumContainer').innerHTML = `
-                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ef4444; text-align: center; padding: 20px;">
-                        <div>
-                            <h3>❌ Globe Error</h3>
-                            <p style="margin: 15px 0;">${error.message}</p>
-                            <button onclick="location.reload()" style="margin-top: 15px; padding: 10px 20px; background: #fc4c02; color: white; border: none; border-radius: 8px; cursor: pointer;">Retry</button>
-                        </div>
-                    </div>
-                `;
+                // Calculate bounding rectangle for better camera positioning
+                const boundingSphere = Cesium.BoundingSphere.fromPoints(positions);
+                const distance = Math.max(boundingSphere.radius * 3, 1000); // Minimum distance of 1km
+                
+                // Fly to route with optimized camera positioning
+                viewer.camera.flyToBoundingSphere(boundingSphere, {
+                    duration: 2.0,
+                    offset: new Cesium.HeadingPitchRange(0, -1.0, distance)
+                });
+                
+                // Request render after changes
+                viewer.scene.requestRender();
             }
         }
+
+        // Update statistics
+        function updateStats() {
+            const filteredRoutes = sampleRoutes.filter(route => {
+                return currentFilter === 'all' || route.type === currentFilter;
+            });
+            
+            const totalDistance = filteredRoutes.reduce((sum, route) => sum + route.distance, 0);
+            const totalTime = filteredRoutes.reduce((sum, route) => sum + route.time, 0);
+            const uniqueLocations = [...new Set(filteredRoutes.map(route => route.location.split(',')[1]?.trim()))];
+            
+            document.getElementById('totalRoutes').textContent = filteredRoutes.length;
+            document.getElementById('totalDistance').textContent = `${totalDistance.toFixed(1)} km`;
+            document.getElementById('totalTime').textContent = `${Math.floor(totalTime/60)}h`;
+            document.getElementById('countries').textContent = uniqueLocations.filter(Boolean).length;
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Filter buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    // Update active filter button
+                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    
+                    // Update filter
+                    currentFilter = e.target.dataset.filter;
+                    
+                    // Refresh UI
+                    populateRoutesList();
+                    updateStats();
+                    
+                    // Clear active route
+                    routeEntities.forEach(entity => viewer.entities.remove(entity));
+                    routeEntities = [];
+                    
+                    // Request render after changes
+                    viewer.scene.requestRender();
+                });
+            });
+            
+            // Camera movement events for explicit rendering
+            viewer.camera.moveStart.addEventListener(() => {
+                viewer.scene.requestRender();
+            });
+            
+            viewer.camera.moveEnd.addEventListener(() => {
+                viewer.scene.requestRender();
+            });
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                viewer.resize();
+                viewer.scene.requestRender();
+            });
+        }
+
+        // Strava API integration framework (placeholder)
+        class StravaAPI {
+            constructor() {
+                this.clientId = null; // Will be set when implementing
+                this.accessToken = null;
+            }
+            
+            async authenticate() {
+                // TODO: Implement Strava OAuth flow
+                console.log('Strava authentication not yet implemented');
+            }
+            
+            async getActivities() {
+                // TODO: Fetch user activities from Strava API
+                console.log('Strava API integration coming soon');
+                return [];
+            }
+            
+            async getActivityStream(activityId) {
+                // TODO: Get detailed route data for specific activity
+                console.log('Activity stream fetching not yet implemented');
+                return null;
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initializeApp);
     </script>
 </body>
 </html>
