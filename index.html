@@ -366,11 +366,11 @@
                     requestRenderMode: true,
                     maximumRenderTimeChange: Infinity,
                     
-                    // Use high-resolution Bing Maps Aerial imagery (15cm resolution)
-                    imageryProvider: await Cesium.BingMapsImageryProvider.fromUrl('https://dev.virtualearth.net', {
-                        key: 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf',
-                        mapStyle: Cesium.BingMapsStyle.AERIAL,
-                        maximumLevel: 20
+                    // Use high-resolution Bing Maps via your Cesium Ion account
+                    // Try your newly added Bing Maps asset first
+                    imageryProvider: new Cesium.IonImageryProvider({ 
+                        assetId: 3, // Bing Maps Aerial - check your Ion dashboard for your specific asset ID
+                        accessToken: Cesium.Ion.defaultAccessToken
                     }),
                     
                     // Use high-resolution terrain
@@ -463,13 +463,16 @@
                 });
                 
             } catch (error) {
-                console.error('Error initializing app:', error);
+                console.error('Error with primary imagery (Asset ID 3):', error);
                 
-                // Fallback to basic Cesium Ion imagery if Bing Maps fails
+                // Fallback to Asset ID 2 (Cesium World Imagery)
                 try {
-                    console.log('Attempting fallback to Cesium Ion imagery...');
+                    console.log('Trying fallback to Asset ID 2 (Cesium World Imagery)...');
                     viewer = new Cesium.Viewer('cesiumContainer', {
-                        imageryProvider: new Cesium.IonImageryProvider({ assetId: 2 }), // Cesium World Imagery
+                        imageryProvider: new Cesium.IonImageryProvider({ 
+                            assetId: 2, // Cesium World Imagery
+                            accessToken: Cesium.Ion.defaultAccessToken 
+                        }),
                         terrainProvider: Cesium.Terrain.fromWorldTerrain(),
                         baseLayerPicker: false,
                         fullscreenButton: false,
@@ -483,21 +486,23 @@
                         creditContainer: document.createElement('div')
                     });
                     
-                    // Basic globe configuration for fallback
-                    viewer.scene.globe.enableLighting = false;
-                    viewer.scene.fog.enabled = false;
-                    
-                    document.getElementById('loadingScreen').classList.add('hidden');
-                    populateRoutesList();
-                    updateStats();
-                    setupEventListeners();
-                    
                     console.log('Fallback imagery loaded successfully');
                     
                 } catch (fallbackError) {
                     console.error('Fallback failed:', fallbackError);
                     document.querySelector('.loading-text').textContent = 'Error loading globe. Please refresh the page.';
+                    return;
                 }
+                
+                // Configure the viewer
+                viewer.scene.globe.enableLighting = false;
+                viewer.scene.fog.enabled = false;
+                viewer.scene.globe.maximumScreenSpaceError = 1.5;
+                
+                document.getElementById('loadingScreen').classList.add('hidden');
+                populateRoutesList();
+                updateStats();
+                setupEventListeners();
             }
         }
 
