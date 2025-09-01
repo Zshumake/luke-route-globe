@@ -447,11 +447,15 @@
                 scene.fxaa = true;
                 scene.gamma = 1.0;
                 
-                // Advanced performance optimizations (2024 best practices)
+                // Advanced performance optimizations (2024 best practices) 
                 scene.logarithmicDepthBuffer = true; // Better depth precision
                 scene.pickTranslucentDepth = false; // Performance improvement
-                scene.requestRenderMode = true; // Explicit rendering mode
+                // Note: requestRenderMode already set in viewer constructor
                 scene.maximumRenderTimeChange = Infinity; // Static scenes
+                
+                // Force globe to be visible and render imagery
+                scene.globe.show = true; // Ensure globe is visible
+                scene.skyBox.show = true; // Ensure skybox is visible
                 
                 // 3D Tiles performance (2024 update)
                 scene.globe.dynamicScreenSpaceError = true; // Enabled by default in 2024
@@ -808,9 +812,29 @@
                         const primaryImagery = viewer.imageryLayers.get(0);
                         if (primaryImagery && primaryImagery.imageryProvider) {
                             console.log('🔍 Diagnostics - Primary imagery provider:', primaryImagery.imageryProvider.constructor.name);
+                            console.log('🔍 Provider ready:', primaryImagery.imageryProvider.ready);
+                            console.log('🔍 Provider URL:', primaryImagery.imageryProvider.url || 'N/A');
+                            console.log('🔍 Alpha channel:', primaryImagery.imageryProvider.hasAlphaChannel);
                             
                             if (primaryImagery.imageryProvider.constructor.name === 'IonImageryProvider') {
                                 console.log('✅ Confirmed: High-resolution Cesium Ion imagery active');
+                                
+                                // Force a scene render
+                                viewer.scene.requestRender();
+                                console.log('🔄 Forced scene render requested');
+                                
+                                // Check if globe is visible
+                                console.log('🌍 Globe show:', viewer.scene.globe.show);
+                                console.log('🌍 Globe enableLighting:', viewer.scene.globe.enableLighting);
+                                
+                                // Try to trigger imagery refresh
+                                primaryImagery.alpha = 0.99;
+                                setTimeout(() => {
+                                    primaryImagery.alpha = 1.0;
+                                    viewer.scene.requestRender();
+                                    console.log('🔄 Imagery refresh attempted');
+                                }, 500);
+                                
                             } else {
                                 console.log('ℹ️ Using alternative imagery provider');
                             }
@@ -818,10 +842,13 @@
                             console.log('🔍 Imagery layers count:', viewer.imageryLayers.length);
                         } else {
                             console.log('⏳ Imagery provider still initializing...');
+                            
+                            // Try again in 2 more seconds
+                            setTimeout(runDiagnostics, 2000);
                         }
                     }
                 } catch (e) {
-                    console.log('🔍 Diagnostics completed (details unavailable)');
+                    console.log('🔍 Diagnostics error:', e.message);
                 }
             }, 3000); // Run diagnostics 3 seconds after initialization
         }
