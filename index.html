@@ -361,13 +361,52 @@
                 sampleRoutes = generateSampleRoutes();
                 
                 // Initialize Cesium viewer with high-resolution satellite imagery
+                // Try multiple asset IDs in order of preference
+                // Check Cesium Ion token first
+                console.log('Cesium Ion Access Token:', Cesium.Ion.defaultAccessToken ? 'Present' : 'Missing');
+                
+                let imageryProvider;
+                try {
+                    // First try: Your Bing Maps asset (Asset ID 3) with timeout
+                    console.log('Attempting to load Asset ID 3 (Bing Maps Aerial)...');
+                    
+                    // Create a promise with timeout for Asset ID 3
+                    const asset3Promise = Cesium.IonImageryProvider.fromAssetId(3);
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Asset ID 3 timeout')), 10000)
+                    );
+                    
+                    imageryProvider = await Promise.race([asset3Promise, timeoutPromise]);
+                    console.log('✅ Asset ID 3 loaded successfully');
+                    
+                } catch (asset3Error) {
+                    console.error('❌ Asset ID 3 failed:', asset3Error.message);
+                    
+                    try {
+                        // Second try: Cesium World Imagery (Asset ID 2) - reliable fallback
+                        console.log('Falling back to Asset ID 2 (Cesium World Imagery)...');
+                        imageryProvider = await Cesium.IonImageryProvider.fromAssetId(2);
+                        console.log('✅ Asset ID 2 loaded successfully');
+                        
+                    } catch (asset2Error) {
+                        console.error('❌ Asset ID 2 also failed:', asset2Error.message);
+                        
+                        // Final fallback: Use basic but reliable imagery
+                        console.log('Using basic satellite imagery as final fallback...');
+                        imageryProvider = new Cesium.createOpenStreetMapImageryProvider({
+                            url: 'https://a.tile.openstreetmap.org/'
+                        });
+                        console.log('✅ Basic imagery provider ready');
+                    }
+                }
+                
                 viewer = new Cesium.Viewer('cesiumContainer', {
                     // Enable optimized rendering for GitHub Pages
                     requestRenderMode: true,
                     maximumRenderTimeChange: Infinity,
                     
-                    // Use high-resolution Bing Maps via your Cesium Ion account (Asset ID 3)
-                    imageryProvider: await Cesium.IonImageryProvider.fromAssetId(3),
+                    // Use the successfully loaded imagery provider
+                    imageryProvider: imageryProvider,
                     
                     // Use high-resolution terrain
                     terrainProvider: await Cesium.createWorldTerrainAsync({
@@ -485,15 +524,30 @@
                 updateStats();
                 setupEventListeners();
                 
-                // Debug imagery loading
+                // Debug imagery loading with detailed diagnostics
                 console.log('Luke Route Globe initialized successfully');
-                console.log('Primary imagery provider:', viewer.imageryLayers.get(0).imageryProvider.constructor.name);
+                const primaryImagery = viewer.imageryLayers.get(0);
+                console.log('Primary imagery provider:', primaryImagery.imageryProvider.constructor.name);
+                console.log('Imagery provider details:', {
+                    providerName: primaryImagery.imageryProvider.constructor.name,
+                    ready: primaryImagery.imageryProvider.ready,
+                    hasAlphaChannel: primaryImagery.imageryProvider.hasAlphaChannel,
+                    url: primaryImagery.imageryProvider.url || 'N/A',
+                    credit: primaryImagery.imageryProvider.credit?.text || 'N/A'
+                });
                 console.log('Number of imagery layers:', viewer.imageryLayers.length);
                 console.log('Globe settings:', {
                     enableLighting: globe.enableLighting,
                     maximumScreenSpaceError: globe.maximumScreenSpaceError,
                     tileCacheSize: globe.tileCacheSize
                 });
+                
+                // Check if we got high-resolution imagery or fallback
+                if (primaryImagery.imageryProvider.constructor.name === 'IonImageryProvider') {
+                    console.log('✅ Using Cesium Ion imagery provider');
+                } else {
+                    console.log('⚠️ Using fallback imagery provider - check your Cesium Ion asset configuration');
+                }
                 
             } catch (error) {
                 console.error('Error with primary imagery (Asset ID 3):', error);
