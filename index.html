@@ -367,15 +367,12 @@
                 
                 let imageryProvider;
                 try {
-                    // First try: Default Cesium Ion World Imagery - most reliable option
-                    console.log('Attempting to load default Cesium Ion World Imagery...');
+                    // First try: Your Asset ID 2 using the exact Cesium Ion recommended method
+                    console.log('Attempting to load Asset ID 2 using fromAssetId method...');
                     
-                    // Use the standard Cesium Ion imagery (bypasses custom assets)
-                    imageryProvider = new Cesium.IonImageryProvider({ 
-                        assetId: 3845, // Standard Cesium World Imagery
-                        accessToken: Cesium.Ion.defaultAccessToken
-                    });
-                    console.log('✅ Default Cesium Ion World Imagery loaded successfully');
+                    // Use the fromAssetId method as shown in Cesium Ion dashboard
+                    imageryProvider = await Cesium.IonImageryProvider.fromAssetId(2);
+                    console.log('✅ Asset ID 2 (Bing Maps Aerial) loaded successfully with fromAssetId');
                     
                 } catch (asset2Error) {
                     console.error('❌ Asset ID 2 failed:', asset2Error.message);
@@ -399,8 +396,8 @@
                 }
                 
                 viewer = new Cesium.Viewer('cesiumContainer', {
-                    // Enable optimized rendering for GitHub Pages
-                    requestRenderMode: true,
+                    // Disable explicit rendering to ensure imagery displays properly
+                    requestRenderMode: false, // Changed to false to force continuous rendering
                     maximumRenderTimeChange: Infinity,
                     
                     // Use the successfully loaded imagery provider
@@ -445,20 +442,13 @@
                 scene.fxaa = true;
                 scene.gamma = 1.0;
                 
-                // Advanced performance optimizations (2024 best practices) 
-                scene.logarithmicDepthBuffer = true; // Better depth precision
-                scene.pickTranslucentDepth = false; // Performance improvement
-                // Note: requestRenderMode already set in viewer constructor
-                scene.maximumRenderTimeChange = Infinity; // Static scenes
-                
-                // Force globe to be visible and render imagery
+                // Simplified scene configuration for reliable imagery display
                 scene.globe.show = true; // Ensure globe is visible
                 scene.skyBox.show = true; // Ensure skybox is visible
                 
-                // 3D Tiles performance (2024 update)
-                scene.globe.dynamicScreenSpaceError = true; // Enabled by default in 2024
-                scene.globe.dynamicScreenSpaceErrorDensity = 0.00278; // Optimized value
-                scene.globe.dynamicScreenSpaceErrorFactor = 4.0; // Horizon view optimization
+                // Basic performance settings without complex optimizations
+                scene.fxaa = true; // Keep anti-aliasing
+                scene.fog.enabled = false; // Clear satellite view
                 
                 // Configure camera controls for detailed zoom
                 const controller = scene.screenSpaceCameraController;
