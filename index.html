@@ -292,8 +292,8 @@
     </div>
 
     <script>
-        // Cesium configuration with updated token that has Bing Maps access
-        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhYzY4M2Y5My0zNjUzLTQxOTAtYWJhMC05ZGM1NzMzY2Q2YjgiLCJpZCI6MzM2NzUyLCJpYXQiOjE3MjUyMjQ4NjZ9.Uxp6RXtjKKnMSB91pDO6nDNrL9Rvuw2hwh2nQPSsqg0';
+        // Cesium configuration with correct token that has Bing Maps access
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNGM2ZmUwZC0zNmI5LTQ4MTQtYjkyNy1kZTMyNTc0MWIyYWUiLCJpZCI6MzM2NzUyLCJpYXQiOjE3NTY1NTU3OTh9.zrnBs58tnAJxGy2FWSpWP5KD8JRTCskZJ1sMt3rUsT8';
 
         // Global variables
         let viewer;
@@ -388,7 +388,7 @@
                         
                         // Final fallback: Use basic but reliable imagery
                         console.log('Using basic satellite imagery as final fallback...');
-                        imageryProvider = new Cesium.createOpenStreetMapImageryProvider({
+                        imageryProvider = new Cesium.OpenStreetMapImageryProvider({
                             url: 'https://a.tile.openstreetmap.org/'
                         });
                         console.log('✅ Basic imagery provider ready');
