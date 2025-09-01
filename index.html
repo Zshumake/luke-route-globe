@@ -360,19 +360,24 @@
             try {
                 sampleRoutes = generateSampleRoutes();
                 
-                // Initialize Cesium viewer with simplified, local-friendly settings
+                // Initialize Cesium viewer with high-resolution satellite imagery
                 viewer = new Cesium.Viewer('cesiumContainer', {
-                    // Disable complex rendering for local development
-                    requestRenderMode: false, // Disable for local compatibility
+                    // Enable optimized rendering for GitHub Pages
+                    requestRenderMode: true,
+                    maximumRenderTimeChange: Infinity,
                     
-                    // Use Cesium Ion imagery with your token - this should work reliably
-                    imageryProvider: new Cesium.IonImageryProvider({ 
-                        assetId: 2, // Cesium World Imagery (satellite)
-                        accessToken: Cesium.Ion.defaultAccessToken
+                    // Use high-resolution Bing Maps Aerial imagery (15cm resolution)
+                    imageryProvider: await Cesium.BingMapsImageryProvider.fromUrl('https://dev.virtualearth.net', {
+                        key: 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf',
+                        mapStyle: Cesium.BingMapsStyle.AERIAL,
+                        maximumLevel: 20
                     }),
                     
-                    // Use Cesium World Terrain
-                    terrainProvider: Cesium.Terrain.fromWorldTerrain(),
+                    // Use high-resolution terrain
+                    terrainProvider: await Cesium.createWorldTerrainAsync({
+                        requestWaterMask: true,
+                        requestVertexNormals: true
+                    }),
                     
                     // Disable unnecessary UI elements
                     baseLayerPicker: false,
@@ -387,36 +392,31 @@
                     creditContainer: document.createElement('div')
                 });
 
-                // Try to add high-resolution Bing imagery as a secondary layer
-                setTimeout(async () => {
-                    try {
-                        const bingImagery = viewer.imageryLayers.addImageryProvider(
-                            await Cesium.BingMapsImageryProvider.fromUrl('https://dev.virtualearth.net', {
-                                key: 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf',
-                                mapStyle: Cesium.BingMapsStyle.AERIAL
-                            })
-                        );
-                        bingImagery.alpha = 0.8;
-                        console.log('Bing imagery added as overlay');
-                    } catch (e) {
-                        console.log('Bing imagery not available, using Cesium Ion only:', e);
-                    }
-                }, 2000);
-                
-                // Configure the globe for better imagery
+                // Configure the globe for optimal satellite imagery
                 const globe = viewer.scene.globe;
-                globe.enableLighting = false;
-                globe.maximumScreenSpaceError = 2;
+                globe.enableLighting = false; // Better for satellite imagery
+                globe.dynamicAtmosphereLighting = false;
+                globe.atmosphereHueSaturationShift = new Cesium.Cartesian3(0.0, 0.0, 0.0);
+                globe.maximumScreenSpaceError = 1.5; // Higher quality
+                globe.tileCacheSize = 200;
+                globe.loadingDescendantLimit = 20;
                 
-                // Configure scene
+                // Configure scene for satellite viewing
                 const scene = viewer.scene;
-                scene.fog.enabled = false;
+                scene.fog.enabled = false; // Clear satellite view
                 scene.backgroundColor = Cesium.Color.BLACK;
+                scene.fxaa = true;
+                scene.gamma = 1.0;
                 
-                // Configure camera controls
+                // Configure camera controls for detailed zoom
                 const controller = scene.screenSpaceCameraController;
-                controller.minimumZoomDistance = 1.0;
+                controller.enableCollisionDetection = false;
+                controller.minimumZoomDistance = 0.5; // Allow very close zoom
                 controller.maximumZoomDistance = 50000000.0;
+                
+                // High-resolution rendering
+                viewer.resolutionScale = 1.0;
+                viewer.useBrowserRecommendedResolution = false;
                 
                 // Set initial view
                 viewer.camera.setView({
@@ -681,17 +681,23 @@
             
             // Camera movement events for explicit rendering
             viewer.camera.moveStart.addEventListener(() => {
-                viewer.scene.requestRender();
+                if (viewer.scene && viewer.scene.requestRender) {
+                    viewer.scene.requestRender();
+                }
             });
             
             viewer.camera.moveEnd.addEventListener(() => {
-                viewer.scene.requestRender();
+                if (viewer.scene && viewer.scene.requestRender) {
+                    viewer.scene.requestRender();
+                }
             });
             
             // Handle window resize
             window.addEventListener('resize', () => {
                 viewer.resize();
-                viewer.scene.requestRender();
+                if (viewer.scene && viewer.scene.requestRender) {
+                    viewer.scene.requestRender();
+                }
             });
         }
 
