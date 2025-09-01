@@ -367,29 +367,29 @@
                 
                 let imageryProvider;
                 try {
-                    // First try: Your Bing Maps asset (Asset ID 3) with timeout
-                    console.log('Attempting to load Asset ID 3 (Bing Maps Aerial)...');
+                    // First try: Your Bing Maps Aerial asset (Asset ID 2) - pure satellite imagery
+                    console.log('Attempting to load Asset ID 2 (Bing Maps Aerial)...');
                     
-                    // Create a promise with timeout for Asset ID 3
-                    const asset3Promise = Cesium.IonImageryProvider.fromAssetId(3);
+                    // Create a promise with timeout for Asset ID 2
+                    const asset2Promise = Cesium.IonImageryProvider.fromAssetId(2);
                     const timeoutPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Asset ID 3 timeout')), 10000)
+                        setTimeout(() => reject(new Error('Asset ID 2 timeout')), 10000)
                     );
                     
-                    imageryProvider = await Promise.race([asset3Promise, timeoutPromise]);
-                    console.log('✅ Asset ID 3 loaded successfully');
+                    imageryProvider = await Promise.race([asset2Promise, timeoutPromise]);
+                    console.log('✅ Asset ID 2 (Bing Maps Aerial) loaded successfully');
                     
-                } catch (asset3Error) {
-                    console.error('❌ Asset ID 3 failed:', asset3Error.message);
+                } catch (asset2Error) {
+                    console.error('❌ Asset ID 2 failed:', asset2Error.message);
                     
                     try {
-                        // Second try: Cesium World Imagery (Asset ID 2) - reliable fallback
-                        console.log('Falling back to Asset ID 2 (Cesium World Imagery)...');
-                        imageryProvider = await Cesium.IonImageryProvider.fromAssetId(2);
-                        console.log('✅ Asset ID 2 loaded successfully');
+                        // Second try: Bing Maps Aerial with Labels (Asset ID 3)
+                        console.log('Falling back to Asset ID 3 (Bing Maps Aerial with Labels)...');
+                        imageryProvider = await Cesium.IonImageryProvider.fromAssetId(3);
+                        console.log('✅ Asset ID 3 loaded successfully');
                         
-                    } catch (asset2Error) {
-                        console.error('❌ Asset ID 2 also failed:', asset2Error.message);
+                    } catch (asset3Error) {
+                        console.error('❌ Asset ID 3 also failed:', asset3Error.message);
                         
                         // Final fallback: Use basic but reliable imagery
                         console.log('Using basic satellite imagery as final fallback...');
@@ -524,10 +524,10 @@
                 updateStats();
                 setupEventListeners();
                 
-                console.log('✅ Luke Route Globe initialized successfully with Asset ID 3!');
+                console.log('✅ Luke Route Globe initialized successfully with high-resolution Bing Maps!');
                 
             } catch (error) {
-                console.error('Error with primary imagery (Asset ID 3):', error);
+                console.error('Error with primary imagery:', error);
                 
                 // Fallback to Asset ID 2 (Cesium World Imagery)
                 try {
