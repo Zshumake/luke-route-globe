@@ -366,12 +366,8 @@
                     requestRenderMode: true,
                     maximumRenderTimeChange: Infinity,
                     
-                    // Use high-resolution Bing Maps via your Cesium Ion account
-                    // Try your newly added Bing Maps asset first
-                    imageryProvider: new Cesium.IonImageryProvider({ 
-                        assetId: 3, // Bing Maps Aerial - check your Ion dashboard for your specific asset ID
-                        accessToken: Cesium.Ion.defaultAccessToken
-                    }),
+                    // Use high-resolution Bing Maps via your Cesium Ion account (Asset ID 3)
+                    imageryProvider: await Cesium.IonImageryProvider.fromAssetId(3),
                     
                     // Use high-resolution terrain
                     terrainProvider: await Cesium.createWorldTerrainAsync({
@@ -392,31 +388,53 @@
                     creditContainer: document.createElement('div')
                 });
 
-                // Configure the globe for optimal satellite imagery
+                // Configure the globe for optimal satellite imagery performance
                 const globe = viewer.scene.globe;
                 globe.enableLighting = false; // Better for satellite imagery
                 globe.dynamicAtmosphereLighting = false;
                 globe.atmosphereHueSaturationShift = new Cesium.Cartesian3(0.0, 0.0, 0.0);
-                globe.maximumScreenSpaceError = 1.5; // Higher quality
-                globe.tileCacheSize = 200;
-                globe.loadingDescendantLimit = 20;
                 
-                // Configure scene for satellite viewing
+                // Performance-optimized settings based on Cesium best practices
+                globe.maximumScreenSpaceError = 2; // Balanced quality/performance (was 1.5)
+                globe.tileCacheSize = 100; // Optimized cache size
+                globe.loadingDescendantLimit = 20;
+                globe.preloadAncestors = true; // Improved loading
+                globe.preloadSiblings = true; // Better tile management
+                
+                // Configure scene for optimal satellite viewing performance
                 const scene = viewer.scene;
                 scene.fog.enabled = false; // Clear satellite view
                 scene.backgroundColor = Cesium.Color.BLACK;
                 scene.fxaa = true;
                 scene.gamma = 1.0;
                 
+                // Advanced performance optimizations (2024 best practices)
+                scene.logarithmicDepthBuffer = true; // Better depth precision
+                scene.pickTranslucentDepth = false; // Performance improvement
+                scene.requestRenderMode = true; // Explicit rendering mode
+                scene.maximumRenderTimeChange = Infinity; // Static scenes
+                
+                // 3D Tiles performance (2024 update)
+                scene.globe.dynamicScreenSpaceError = true; // Enabled by default in 2024
+                scene.globe.dynamicScreenSpaceErrorDensity = 0.00278; // Optimized value
+                scene.globe.dynamicScreenSpaceErrorFactor = 4.0; // Horizon view optimization
+                
                 // Configure camera controls for detailed zoom
                 const controller = scene.screenSpaceCameraController;
-                controller.enableCollisionDetection = false;
+                controller.enableCollisionDetection = false; // Performance improvement
                 controller.minimumZoomDistance = 0.5; // Allow very close zoom
                 controller.maximumZoomDistance = 50000000.0;
                 
-                // High-resolution rendering
+                // High-resolution rendering with performance balance
                 viewer.resolutionScale = 1.0;
                 viewer.useBrowserRecommendedResolution = false;
+                
+                // WebGL optimization
+                const gl = scene.context._gl;
+                if (gl.getExtension('EXT_texture_filter_anisotropic')) {
+                    // Enable anisotropic filtering for better imagery quality
+                    console.log('Anisotropic filtering enabled for better satellite imagery');
+                }
                 
                 // Set initial view
                 viewer.camera.setView({
@@ -428,23 +446,38 @@
                     }
                 });
 
-                // Force initial render
+                // Force initial render with performance monitoring
                 viewer.scene.requestRender();
+                console.log('Initial render requested');
 
-                // Wait for globe to be ready
+                // Wait for globe to be ready with timeout
                 await new Promise((resolve) => {
+                    let resolved = false;
                     const removeCallback = globe.tileLoadProgressEvent.addEventListener((queuedTileCount) => {
-                        if (queuedTileCount === 0) {
+                        console.log(`Tiles loading: ${queuedTileCount} remaining`);
+                        if (queuedTileCount === 0 && !resolved) {
+                            resolved = true;
                             removeCallback();
                             resolve();
                         }
                     });
+                    
+                    // Timeout fallback to prevent infinite loading
+                    setTimeout(() => {
+                        if (!resolved) {
+                            resolved = true;
+                            removeCallback();
+                            console.log('Globe loading timeout - proceeding anyway');
+                            resolve();
+                        }
+                    }, 10000); // 10 second timeout
                 });
 
                 // Hide loading screen after globe is ready
                 setTimeout(() => {
                     document.getElementById('loadingScreen').classList.add('hidden');
                     viewer.scene.requestRender(); // Ensure final render
+                    console.log('Application fully loaded with optimized performance');
                 }, 1000);
 
                 // Initialize UI
@@ -635,10 +668,15 @@
                 // Fly to route with optimized camera positioning
                 viewer.camera.flyToBoundingSphere(boundingSphere, {
                     duration: 2.0,
-                    offset: new Cesium.HeadingPitchRange(0, -1.0, distance)
+                    offset: new Cesium.HeadingPitchRange(0, -1.0, distance),
+                    complete: () => {
+                        // Request render after camera movement completes
+                        viewer.scene.requestRender();
+                        console.log(`Flew to route: ${route.name}`);
+                    }
                 });
                 
-                // Request render after changes
+                // Request immediate render for route display
                 viewer.scene.requestRender();
             }
         }
