@@ -119,7 +119,9 @@ The application is successful when:
 - Request renders after route changes
 
 #### Token Information
-- Cesium Ion Token: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJjMjM3NTEzMi1mMDJmLTQyMDUtYjA5OC1jNmU0NDA3NDlmNWQiLCJpZCI6MzM2NzUyLCJpYXQiOjE3NTY1NTU2NzR9.AoxR_iV8YYTrhRnncxGBZQYyjfsaq5J2WckHrpB6wpA`
+- Cesium Ion Token: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhYzY4M2Y5My0zNjUzLTQxOTAtYWJhMC05ZGM1NzMzY2Q2YjgiLCJpZCI6MzM2NzUyLCJpYXQiOjE3MjUyMjQ4NjZ9.Uxp6RXtjKKnMSB91pDO6nDNrL9Rvuw2hwh2nQPSsqg0`
+- **Token Name**: "Luke's World Map" 
+- **Permissions**: assets:read, assets:source, access to Bing Maps Aerial imagery
 - GitHub Pages URL: `https://zshumake.github.io/luke-route-globe/`
 
 ## 🎯 CESIUM ION ACCOUNT OPTIMIZATION (2024 Best Practices)
