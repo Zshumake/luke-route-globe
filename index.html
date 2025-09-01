@@ -367,17 +367,15 @@
                 
                 let imageryProvider;
                 try {
-                    // First try: Your Bing Maps Aerial asset (Asset ID 2) - pure satellite imagery
-                    console.log('Attempting to load Asset ID 2 (Bing Maps Aerial)...');
+                    // First try: Default Cesium Ion World Imagery - most reliable option
+                    console.log('Attempting to load default Cesium Ion World Imagery...');
                     
-                    // Create a promise with timeout for Asset ID 2
-                    const asset2Promise = Cesium.IonImageryProvider.fromAssetId(2);
-                    const timeoutPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Asset ID 2 timeout')), 10000)
-                    );
-                    
-                    imageryProvider = await Promise.race([asset2Promise, timeoutPromise]);
-                    console.log('✅ Asset ID 2 (Bing Maps Aerial) loaded successfully');
+                    // Use the standard Cesium Ion imagery (bypasses custom assets)
+                    imageryProvider = new Cesium.IonImageryProvider({ 
+                        assetId: 3845, // Standard Cesium World Imagery
+                        accessToken: Cesium.Ion.defaultAccessToken
+                    });
+                    console.log('✅ Default Cesium Ion World Imagery loaded successfully');
                     
                 } catch (asset2Error) {
                     console.error('❌ Asset ID 2 failed:', asset2Error.message);
@@ -843,8 +841,17 @@
                         } else {
                             console.log('⏳ Imagery provider still initializing...');
                             
-                            // Try again in 2 more seconds
-                            setTimeout(runDiagnostics, 2000);
+                            // Stop infinite retries after reasonable attempts
+                            if (!runDiagnostics.retryCount) runDiagnostics.retryCount = 0;
+                            runDiagnostics.retryCount++;
+                            
+                            if (runDiagnostics.retryCount < 5) {
+                                // Try again in 2 more seconds, but only 5 times total
+                                setTimeout(runDiagnostics, 2000);
+                            } else {
+                                console.log('❌ Imagery provider failed to initialize after 5 attempts');
+                                console.log('💡 Suggestion: Asset ID 2 may be misconfigured in your Cesium Ion account');
+                            }
                         }
                     }
                 } catch (e) {
