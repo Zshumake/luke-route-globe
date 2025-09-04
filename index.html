@@ -355,61 +355,87 @@
             ];
         };
 
-        // Initialize the application
+        // Initialize the application with robust imagery fallback system
         async function initializeApp() {
             try {
                 sampleRoutes = generateSampleRoutes();
+                console.log('🌍 Initializing Luke\'s Route Globe...');
                 
-                // Initialize Cesium viewer with high-resolution satellite imagery
-                // Try multiple asset IDs in order of preference
-                // Check Cesium Ion token first
-                console.log('Cesium Ion Access Token:', Cesium.Ion.defaultAccessToken ? 'Present' : 'Missing');
+                // Create multiple imagery provider strategies
+                let imageryProvider = null;
                 
-                let imageryProvider;
                 try {
-                    // First try: Your Asset ID 2 using the exact Cesium Ion recommended method
-                    console.log('Attempting to load Asset ID 2 using fromAssetId method...');
+                    // STRATEGY 1: Your Cesium Ion Bing Maps Aerial (you have access to this)
+                    console.log('🗺️ Attempting your Cesium Ion Bing Maps Aerial (Strategy 1)...');
+                    imageryProvider = await Cesium.IonImageryProvider.fromAssetId(1, {
+                        accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNGM2ZmUwZC0zNmI5LTQ4MTQtYjkyNy1kZTMyNTc0MWIyYWUiLCJpZCI6MzM2NzUyLCJpYXQiOjE3NTY1NTU3OTh9.zrnBs58tnAJxGy2FWSpWP5KD8JRTCskZJ1sMt3rUsT8'
+                    });
+                    console.log('✅ Strategy 1: Cesium Ion Bing Maps Aerial loaded successfully');
                     
-                    // Use the fromAssetId method as shown in Cesium Ion dashboard
-                    imageryProvider = await Cesium.IonImageryProvider.fromAssetId(2);
-                    console.log('✅ Asset ID 2 (Bing Maps Aerial) loaded successfully with fromAssetId');
-                    
-                } catch (asset2Error) {
-                    console.error('❌ Asset ID 2 failed:', asset2Error.message);
+                } catch (cesiumBingError) {
+                    console.warn('⚠️ Strategy 1 failed:', cesiumBingError.message);
                     
                     try {
-                        // Second try: Bing Maps Aerial with Labels (Asset ID 3)
-                        console.log('Falling back to Asset ID 3 (Bing Maps Aerial with Labels)...');
-                        imageryProvider = await Cesium.IonImageryProvider.fromAssetId(3);
-                        console.log('✅ Asset ID 3 loaded successfully');
-                        
-                    } catch (asset3Error) {
-                        console.error('❌ Asset ID 3 also failed:', asset3Error.message);
-                        
-                        // Final fallback: Use basic but reliable imagery
-                        console.log('Using basic satellite imagery as final fallback...');
-                        imageryProvider = new Cesium.OpenStreetMapImageryProvider({
-                            url: 'https://a.tile.openstreetmap.org/'
+                        // STRATEGY 2: Direct Bing Maps API (no Cesium Ion dependency)
+                        console.log('🗺️ Attempting direct Bing Maps API (Strategy 2)...');
+                        imageryProvider = await Cesium.BingMapsImageryProvider.fromUrl('https://dev.virtualearth.net', {
+                            key: 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf',
+                            mapStyle: Cesium.BingMapsStyle.AERIAL,
+                            maximumLevel: 20
                         });
-                        console.log('✅ Basic imagery provider ready');
+                        console.log('✅ Strategy 2: Direct Bing Maps loaded successfully');
+                        
+                    } catch (bingError) {
+                        console.warn('⚠️ Strategy 2 failed:', bingError.message);
+                    
+                        try {
+                            // STRATEGY 3: Cesium Ion World Imagery (reliable)
+                            console.log('🌍 Attempting Cesium Ion World Imagery (Strategy 3)...');
+                            imageryProvider = await Cesium.createWorldImageryAsync();
+                            console.log('✅ Strategy 3: Cesium Ion World Imagery loaded successfully');
+                            
+                        } catch (cesiumIonError) {
+                            console.warn('⚠️ Strategy 3 failed:', cesiumIonError.message);
+                        
+                            try {
+                                // STRATEGY 4: ESRI World Imagery (high quality, no account needed)
+                                console.log('🛰️ Attempting ESRI World Imagery (Strategy 4)...');
+                                imageryProvider = await Cesium.ArcGisMapServerImageryProvider.fromUrl('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer');
+                                console.log('✅ Strategy 4: ESRI World Imagery loaded successfully');
+                                
+                            } catch (esriError) {
+                                console.warn('⚠️ Strategy 4 failed:', esriError.message);
+                                
+                                // STRATEGY 5: OpenStreetMap (always works)
+                                console.log('🗺️ Using OpenStreetMap fallback (Strategy 5)...');
+                                imageryProvider = new Cesium.OpenStreetMapImageryProvider({
+                                    url: 'https://tile.openstreetmap.org/',
+                                    maximumLevel: 19
+                                });
+                                console.log('✅ Strategy 5: OpenStreetMap fallback ready');
+                            }
+                        }
                     }
                 }
                 
+                if (!imageryProvider) {
+                    throw new Error('All imagery provider strategies failed');
+                }
+                
+                // Create Cesium viewer with simplified, reliable configuration
+                console.log('🌍 Creating Cesium viewer...');
                 viewer = new Cesium.Viewer('cesiumContainer', {
-                    // Disable explicit rendering to ensure imagery displays properly
-                    requestRenderMode: false, // Changed to false to force continuous rendering
-                    maximumRenderTimeChange: Infinity,
-                    
-                    // Use the successfully loaded imagery provider
+                    // Imagery
                     imageryProvider: imageryProvider,
                     
-                    // Use high-resolution terrain
-                    terrainProvider: await Cesium.createWorldTerrainAsync({
-                        requestWaterMask: true,
-                        requestVertexNormals: true
-                    }),
+                    // Terrain (simplified to avoid Ion dependency issues)
+                    terrainProvider: Cesium.Terrain.fromWorldTerrain(),
                     
-                    // Disable unnecessary UI elements
+                    // Rendering
+                    requestRenderMode: false,
+                    maximumRenderTimeChange: Infinity,
+                    
+                    // Disable UI elements for clean look
                     baseLayerPicker: false,
                     fullscreenButton: false,
                     geocoder: false,
@@ -419,8 +445,17 @@
                     timeline: false,
                     navigationHelpButton: false,
                     animation: false,
-                    creditContainer: document.createElement('div')
+                    creditContainer: document.createElement('div'),
+                    
+                    // Enhanced scene settings
+                    contextOptions: {
+                        requestWebGL2: true,
+                        alpha: false
+                    },
+                    useBrowserRecommendedResolution: true
                 });
+                
+                console.log('✅ Cesium viewer created successfully');
 
                 // Configure the globe for optimal satellite imagery performance
                 const globe = viewer.scene.globe;
@@ -516,49 +551,24 @@
                 updateStats();
                 setupEventListeners();
                 
-                console.log('✅ Luke Route Globe initialized successfully with high-resolution Bing Maps!');
+                console.log('✅ Luke Route Globe initialized successfully!');
                 
             } catch (error) {
-                console.error('Error with primary imagery:', error);
+                console.error('❌ Critical initialization error:', error);
                 
-                // Fallback to Asset ID 2 (Cesium World Imagery)
-                try {
-                    console.log('Trying fallback to Asset ID 2 (Cesium World Imagery)...');
-                    viewer = new Cesium.Viewer('cesiumContainer', {
-                        imageryProvider: new Cesium.IonImageryProvider({ 
-                            assetId: 2, // Cesium World Imagery
-                            accessToken: Cesium.Ion.defaultAccessToken 
-                        }),
-                        terrainProvider: Cesium.Terrain.fromWorldTerrain(),
-                        baseLayerPicker: false,
-                        fullscreenButton: false,
-                        geocoder: false,
-                        homeButton: false,
-                        sceneModePicker: false,
-                        selectionIndicator: false,
-                        timeline: false,
-                        navigationHelpButton: false,
-                        animation: false,
-                        creditContainer: document.createElement('div')
-                    });
-                    
-                    console.log('Fallback imagery loaded successfully');
-                    
-                } catch (fallbackError) {
-                    console.error('Fallback failed:', fallbackError);
-                    document.querySelector('.loading-text').textContent = 'Error loading globe. Please refresh the page.';
-                    return;
+                // Display error message to user
+                const loadingText = document.querySelector('.loading-text');
+                if (loadingText) {
+                    loadingText.textContent = '❌ Error loading globe. Please refresh the page.';
                 }
                 
-                // Configure the viewer
-                viewer.scene.globe.enableLighting = false;
-                viewer.scene.fog.enabled = false;
-                viewer.scene.globe.maximumScreenSpaceError = 1.5;
-                
-                document.getElementById('loadingScreen').classList.add('hidden');
-                populateRoutesList();
-                updateStats();
-                setupEventListeners();
+                // Still try to hide loading screen after delay
+                setTimeout(() => {
+                    const loadingScreen = document.getElementById('loadingScreen');
+                    if (loadingScreen) {
+                        loadingScreen.classList.add('hidden');
+                    }
+                }, 3000);
             }
         }
 
@@ -792,68 +802,35 @@
             }
         }
 
-        // Diagnostic function to run after initialization
-        function runDiagnostics() {
+        // Simple diagnostic function (no retries to avoid loops)
+        function runBasicDiagnostics() {
             setTimeout(() => {
                 try {
-                    if (viewer && viewer.imageryLayers) {
+                    if (viewer && viewer.imageryLayers && viewer.imageryLayers.length > 0) {
                         const primaryImagery = viewer.imageryLayers.get(0);
                         if (primaryImagery && primaryImagery.imageryProvider) {
-                            console.log('🔍 Diagnostics - Primary imagery provider:', primaryImagery.imageryProvider.constructor.name);
-                            console.log('🔍 Provider ready:', primaryImagery.imageryProvider.ready);
-                            console.log('🔍 Provider URL:', primaryImagery.imageryProvider.url || 'N/A');
-                            console.log('🔍 Alpha channel:', primaryImagery.imageryProvider.hasAlphaChannel);
+                            console.log('✅ Imagery provider active:', primaryImagery.imageryProvider.constructor.name);
+                            console.log('🌍 Globe visible:', viewer.scene.globe.show);
                             
-                            if (primaryImagery.imageryProvider.constructor.name === 'IonImageryProvider') {
-                                console.log('✅ Confirmed: High-resolution Cesium Ion imagery active');
-                                
-                                // Force a scene render
-                                viewer.scene.requestRender();
-                                console.log('🔄 Forced scene render requested');
-                                
-                                // Check if globe is visible
-                                console.log('🌍 Globe show:', viewer.scene.globe.show);
-                                console.log('🌍 Globe enableLighting:', viewer.scene.globe.enableLighting);
-                                
-                                // Try to trigger imagery refresh
-                                primaryImagery.alpha = 0.99;
-                                setTimeout(() => {
-                                    primaryImagery.alpha = 1.0;
-                                    viewer.scene.requestRender();
-                                    console.log('🔄 Imagery refresh attempted');
-                                }, 500);
-                                
-                            } else {
-                                console.log('ℹ️ Using alternative imagery provider');
-                            }
-                            
-                            console.log('🔍 Imagery layers count:', viewer.imageryLayers.length);
+                            // Single render request
+                            viewer.scene.requestRender();
+                            console.log('🔄 Final render requested');
                         } else {
-                            console.log('⏳ Imagery provider still initializing...');
-                            
-                            // Stop infinite retries after reasonable attempts
-                            if (!runDiagnostics.retryCount) runDiagnostics.retryCount = 0;
-                            runDiagnostics.retryCount++;
-                            
-                            if (runDiagnostics.retryCount < 5) {
-                                // Try again in 2 more seconds, but only 5 times total
-                                setTimeout(runDiagnostics, 2000);
-                            } else {
-                                console.log('❌ Imagery provider failed to initialize after 5 attempts');
-                                console.log('💡 Suggestion: Asset ID 2 may be misconfigured in your Cesium Ion account');
-                            }
+                            console.log('⚠️ Imagery provider not fully initialized yet');
                         }
+                    } else {
+                        console.log('⚠️ Viewer not properly initialized');
                     }
                 } catch (e) {
                     console.log('🔍 Diagnostics error:', e.message);
                 }
-            }, 3000); // Run diagnostics 3 seconds after initialization
+            }, 2000); // Single check after 2 seconds
         }
 
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', () => {
             initializeApp();
-            runDiagnostics();
+            runBasicDiagnostics();
         });
     </script>
 </body>
