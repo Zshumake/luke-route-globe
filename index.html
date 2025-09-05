@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌍 Luke's Route Globe v2.0</title>
+    <title>🌍 Luke's Route Globe v2.1 DEBUG</title>
     
     <!-- Cesium.js -->
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Cesium.js"></script>
@@ -358,24 +358,40 @@
         // Initialize the application with robust imagery fallback system
         async function initializeApp() {
             try {
+                console.log('🌍 =================================');
+                console.log('🌍 STARTING LUKE ROUTE GLOBE DEBUG');
+                console.log('🌍 =================================');
+                console.log('🔍 Debug: generateSampleRoutes called');
                 sampleRoutes = generateSampleRoutes();
-                console.log('🌍 Initializing Luke\'s Route Globe...');
+                console.log('🔍 Debug: Sample routes generated:', sampleRoutes.length, 'routes');
+                
+                console.log('🔍 Debug: Cesium Ion token status:', Cesium.Ion.defaultAccessToken ? 'SET' : 'NOT SET');
+                console.log('🔍 Debug: Cesium version:', Cesium.VERSION || 'Unknown');
                 
                 // Create multiple imagery provider strategies
                 let imageryProvider = null;
+                console.log('🔍 Debug: Starting imagery provider selection...');
                 
                 try {
                     // STRATEGY 1: Direct Bing Maps API (most reliable for your use case)
-                    console.log('🗺️ Attempting direct Bing Maps API (Strategy 1)...');
+                    console.log('🗺️ DEBUG: Starting Strategy 1 - Direct Bing Maps API...');
+                    console.log('🔍 Debug: Bing Maps URL: https://dev.virtualearth.net');
+                    console.log('🔍 Debug: Bing Maps key length:', 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf'.length);
+                    console.log('🔍 Debug: Creating BingMapsImageryProvider with AERIAL style...');
+                    
                     imageryProvider = await Cesium.BingMapsImageryProvider.fromUrl('https://dev.virtualearth.net', {
                         key: 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf',
                         mapStyle: Cesium.BingMapsStyle.AERIAL,
                         maximumLevel: 20
                     });
-                    console.log('✅ Strategy 1: Direct Bing Maps API loaded successfully');
+                    console.log('✅ DEBUG: Strategy 1 SUCCESS - Direct Bing Maps API loaded');
+                    console.log('🔍 Debug: Provider type:', imageryProvider.constructor.name);
+                    console.log('🔍 Debug: Provider ready:', imageryProvider.ready);
                     
                 } catch (cesiumBingError) {
-                    console.warn('⚠️ Strategy 1 failed:', cesiumBingError.message);
+                    console.error('❌ DEBUG: Strategy 1 FAILED - Direct Bing Maps API');
+                    console.error('🔍 Debug: Error message:', cesiumBingError.message);
+                    console.error('🔍 Debug: Error stack:', cesiumBingError.stack);
                     
                     try {
                         // STRATEGY 2: Cesium Ion default Bing Maps (without specific Asset ID)
@@ -423,7 +439,14 @@
                 }
                 
                 // Create Cesium viewer with simplified, reliable configuration
-                console.log('🌍 Creating Cesium viewer...');
+                console.log('🌍 =================================');
+                console.log('🌍 DEBUG: CREATING CESIUM VIEWER');
+                console.log('🌍 =================================');
+                console.log('🔍 Debug: Final imagery provider type:', imageryProvider.constructor.name);
+                console.log('🔍 Debug: Final imagery provider ready:', imageryProvider.ready);
+                console.log('🔍 Debug: cesiumContainer element exists:', !!document.getElementById('cesiumContainer'));
+                console.log('🔍 Debug: About to create Viewer with configuration...');
+                
                 viewer = new Cesium.Viewer('cesiumContainer', {
                     // Imagery
                     imageryProvider: imageryProvider,
@@ -455,7 +478,17 @@
                     useBrowserRecommendedResolution: true
                 });
                 
-                console.log('✅ Cesium viewer created successfully');
+                console.log('✅ DEBUG: Cesium viewer created successfully!');
+                console.log('🔍 Debug: Viewer object exists:', !!viewer);
+                console.log('🔍 Debug: Viewer scene exists:', !!viewer.scene);
+                console.log('🔍 Debug: Viewer globe exists:', !!viewer.scene.globe);
+                console.log('🔍 Debug: Imagery layers count:', viewer.imageryLayers.length);
+                
+                if (viewer.imageryLayers.length > 0) {
+                    const layer0 = viewer.imageryLayers.get(0);
+                    console.log('🔍 Debug: Layer 0 imagery provider:', layer0.imageryProvider.constructor.name);
+                    console.log('🔍 Debug: Layer 0 ready:', layer0.imageryProvider.ready);
+                }
 
                 // Configure the globe for optimal satellite imagery performance
                 const globe = viewer.scene.globe;
