@@ -303,8 +303,8 @@
         
         // Strava API Configuration
         const STRAVA_CONFIG = {
-            clientId: '', // Add your Strava App Client ID here
-            clientSecret: '', // Add your Strava App Client Secret here (backend only)
+            clientId: '175720', // Luke's Route Globe App Client ID
+            clientSecret: '4d1aca2ba311a1a36c195e1e6bae008ef52dab1f', // Client Secret
             redirectUri: window.location.origin + window.location.pathname,
             scope: 'read,activity:read_all',
             apiBaseUrl: 'https://www.strava.com/api/v3'
@@ -460,10 +460,10 @@
             };
         }
         
-        // Load Luke's real routes from Strava
+        // Load ALL of Luke's routes from Strava (with pagination)
         async function loadStravaRoutes() {
             try {
-                console.log('🚴‍♂️ Loading Luke\'s routes from Strava...');
+                console.log('🚴‍♂️ Loading ALL of Luke\'s routes from Strava...');
                 
                 // Check if already authenticated
                 if (!stravaAPI.isAuthenticated()) {
@@ -474,20 +474,65 @@
                 // Handle OAuth callback if present
                 await stravaAPI.handleAuthCallback();
                 
-                const activities = await stravaAPI.getActivities(1, 50); // Get 50 most recent activities
-                console.log(`📊 Loaded ${activities.length} activities from Strava`);
+                // Load ALL activities using pagination
+                const allActivities = [];
+                let page = 1;
+                let hasMorePages = true;
+                const perPage = 200; // Maximum per request
                 
-                const routes = [];
-                const maxRoutes = Math.min(activities.length, 20); // Limit to 20 routes for performance
+                // Update UI to show progress
+                updateLoadingStatus('Loading activities from Strava...');
                 
-                for (let i = 0; i < maxRoutes; i++) {
-                    const activity = activities[i];
+                while (hasMorePages) {
+                    console.log(`📄 Loading page ${page} of activities...`);
+                    const activities = await stravaAPI.getActivities(page, perPage);
                     
+                    if (activities.length === 0) {
+                        hasMorePages = false;
+                        console.log('✅ Reached end of activities');
+                    } else {
+                        allActivities.push(...activities);
+                        console.log(`📊 Loaded ${activities.length} activities from page ${page} (Total: ${allActivities.length})`);
+                        
+                        // Update progress
+                        updateLoadingStatus(`Loaded ${allActivities.length} activities...`);
+                        
+                        // If we got less than perPage activities, we're on the last page
+                        if (activities.length < perPage) {
+                            hasMorePages = false;
+                        } else {
+                            page++;
+                        }
+                        
+                        // Rate limiting between pages
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    }
+                }
+                
+                console.log(`🎯 TOTAL ACTIVITIES FOUND: ${allActivities.length}`);
+                updateLoadingStatus(`Processing ${allActivities.length} activities...`);
+                
+                // Process all activities to routes
+                const routes = [];
+                let processedCount = 0;
+                
+                for (const activity of allActivities) {
                     try {
+                        processedCount++;
+                        
+                        // Update progress every 10 activities
+                        if (processedCount % 10 === 0) {
+                            updateLoadingStatus(`Processing ${processedCount}/${allActivities.length} activities...`);
+                        }
+                        
                         // Get GPS stream data for activities with GPS
                         let streamData = null;
                         if (activity.map && activity.map.summary_polyline) {
-                            streamData = await stravaAPI.getActivityStream(activity.id);
+                            try {
+                                streamData = await stravaAPI.getActivityStream(activity.id);
+                            } catch (streamError) {
+                                console.warn(`⚠️ Could not load GPS data for ${activity.name}`);
+                            }
                         }
                         
                         const route = transformStravaActivity(activity, streamData);
@@ -495,28 +540,44 @@
                         // Only include activities with GPS coordinates
                         if (route.coordinates && route.coordinates.length > 0) {
                             routes.push(route);
-                            console.log(`✅ Added route: ${route.name} (${route.type})`);
+                            console.log(`✅ Added route: ${route.name} (${route.type}) - ${route.date}`);
+                        } else {
+                            // Still add activities without GPS for list visibility (indoor workouts, etc.)
+                            routes.push(transformStravaActivity(activity));
                         }
                         
-                        // Rate limiting - wait between requests
-                        await new Promise(resolve => setTimeout(resolve, 100));
+                        // Rate limiting - wait between requests (respect API limits)
+                        await new Promise(resolve => setTimeout(resolve, 75)); // 13 requests per second max
                         
-                    } catch (streamError) {
-                        console.warn(`⚠️ Could not load GPS data for ${activity.name}:`, streamError.message);
-                        
-                        // Add activity without GPS data for list visibility
-                        routes.push(transformStravaActivity(activity));
+                    } catch (error) {
+                        console.warn(`⚠️ Error processing activity ${activity.name}:`, error.message);
                     }
                 }
                 
-                console.log(`🎉 Successfully loaded ${routes.length} routes from Strava`);
+                console.log(`🎉 SUCCESSFULLY LOADED ALL ROUTES: ${routes.length} total routes`);
+                console.log(`📈 Routes with GPS: ${routes.filter(r => r.coordinates?.length > 0).length}`);
+                console.log(`🏃‍♂️ Running routes: ${routes.filter(r => r.type === 'running').length}`);
+                console.log(`🚴‍♂️ Cycling routes: ${routes.filter(r => r.type === 'cycling').length}`);
+                
+                updateLoadingStatus(`✅ Loaded ${routes.length} routes successfully!`);
+                
                 return routes;
                 
             } catch (error) {
                 console.error('❌ Failed to load Strava routes:', error);
                 console.log('🔄 Falling back to sample data');
+                updateLoadingStatus('❌ Failed to load Strava data - using samples');
                 return generateSampleRoutes();
             }
+        }
+        
+        // Update loading status in UI
+        function updateLoadingStatus(message) {
+            const loadingText = document.querySelector('.loading-text');
+            if (loadingText) {
+                loadingText.textContent = message;
+            }
+            console.log(`📱 Status: ${message}`);
         }
         
         // Add Strava authentication UI to sidebar
