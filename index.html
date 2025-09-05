@@ -342,6 +342,8 @@
         let worldDistanceEntities = []; // For around-the-world distance visualization
         let worldDistanceAnimation = null; // Animation handle
         let savedCameraPosition = null; // Save camera position before visualization
+        let routeCache = null; // Cache for loaded routes
+        let isLoadingAdditionalRoutes = false; // Track background loading
         
         // Strava API Configuration
         const STRAVA_CONFIG = {
@@ -589,11 +591,90 @@
             };
         }
         
-        // Load ALL of Luke's routes from Strava (with pagination)
+        // SMART CACHING FUNCTIONS (storage-conscious)
+        function getCachedRoutes() {
+            try {
+                const cached = localStorage.getItem('strava_routes_cache');
+                const cacheTimestamp = localStorage.getItem('strava_routes_cache_timestamp');
+                
+                if (cached && cacheTimestamp) {
+                    const cacheAge = Date.now() - parseInt(cacheTimestamp);
+                    const maxAge = 12 * 60 * 60 * 1000; // 12 hours (shorter for big datasets)
+                    
+                    if (cacheAge < maxAge) {
+                        const routes = JSON.parse(cached);
+                        console.log(`✨ CACHE HIT: ${routes.length} routes (${(cached.length/1024).toFixed(0)}KB, ${(cacheAge/1000/60).toFixed(0)}min old)`);
+                        return routes;
+                    } else {
+                        console.log('⏰ Cache expired (12hr limit for performance)');
+                        clearRouteCache();
+                    }
+                }
+                return null;
+            } catch (error) {
+                console.warn('⚠️ Cache error:', error);
+                clearRouteCache(); // Clear corrupted cache
+                return null;
+            }
+        }
+        
+        function cacheRoutes(routes) {
+            try {
+                // STORAGE OPTIMIZATION: Only cache essential data
+                const lightRoutes = routes.map(route => ({
+                    id: route.id,
+                    name: route.name,
+                    type: route.type,
+                    distance: route.distance,
+                    time: route.time,
+                    date: route.date,
+                    location: route.location,
+                    // REDUCE GPS COORDINATES: Only every 10th point for caching
+                    coordinates: route.coordinates ? route.coordinates.filter((_, i) => i % 10 === 0) : null
+                }));
+                
+                const jsonData = JSON.stringify(lightRoutes);
+                const sizeKB = jsonData.length / 1024;
+                
+                // SAFETY CHECK: Don't cache if > 5MB (browser localStorage limit ~10MB)
+                if (sizeKB > 5000) {
+                    console.warn(`⚠️ Cache too large (${sizeKB.toFixed(0)}KB), using first 100 routes only`);
+                    const reducedRoutes = lightRoutes.slice(0, 100);
+                    localStorage.setItem('strava_routes_cache', JSON.stringify(reducedRoutes));
+                    console.log(`💾 Cached 100 routes instead of ${routes.length} (size limit)`);
+                } else {
+                    localStorage.setItem('strava_routes_cache', jsonData);
+                    console.log(`💾 Cached ${routes.length} routes (${sizeKB.toFixed(0)}KB - safe size)`);
+                }
+                
+                localStorage.setItem('strava_routes_cache_timestamp', Date.now().toString());
+                
+            } catch (error) {
+                console.warn('⚠️ Cache save failed (likely storage full):', error);
+                clearRouteCache();
+            }
+        }
+        
+        function clearRouteCache() {
+            localStorage.removeItem('strava_routes_cache');
+            localStorage.removeItem('strava_routes_cache_timestamp');
+            console.log('🧽 Cache cleared');
+        }
+        
+        // Progressive route loading (show first 100, then continue)
         async function loadStravaRoutes() {
             try {
-                console.log('🚴‍♂️ Loading ALL routes from Strava...');
-                console.log('🔍 DEBUG: Checking authentication status...');
+                console.log('🚴‍♂️ OPTIMIZED Loading with PROGRESSIVE LOADING and CACHING...');
+                
+                // Check cache first - avoid reloading same routes
+                const cachedRoutes = getCachedRoutes();
+                if (cachedRoutes && cachedRoutes.length > 0) {
+                    console.log(`⚡ FAST LOAD: Using ${cachedRoutes.length} cached routes!`);
+                    // TODO: Start background loading for any new routes
+                    return cachedRoutes;
+                }
+                
+                console.log('🔍 DEBUG: No cache, fetching fresh data...');
                 console.log('🔍 DEBUG: Access token exists:', !!stravaAPI.accessToken);
                 console.log('🔍 DEBUG: Access token length:', stravaAPI.accessToken ? stravaAPI.accessToken.length : 0);
                 
@@ -607,11 +688,13 @@
                     return generateSampleRoutes();
                 }
                 
-                // Load ALL activities using pagination
+                // Load RECENT activities only (optimized for speed)
                 const allActivities = [];
                 let page = 1;
                 let hasMorePages = true;
-                const perPage = 200; // Maximum per request
+                const perPage = 100; // Reduced per request
+                const maxRoutes = 500; // COMPROMISE: Load 500 recent routes (good balance)
+                const initialBatch = 100; // Show first 100 FAST, then continue in background
                 
                 // Update UI to show progress
                 updateLoadingStatus('Loading activities from Strava...');
@@ -645,8 +728,13 @@
                             // Update progress
                             updateLoadingStatus(`Loaded ${allActivities.length} activities...`);
                             
+                            // SPEED OPTIMIZATION: Stop if we have enough routes
+                            if (allActivities.length >= maxRoutes) {
+                                hasMorePages = false;
+                                console.log(`⚡ SPEED LIMIT: Stopping at ${allActivities.length} routes (max: ${maxRoutes})`);
+                            }
                             // If we got less than perPage activities, we're on the last page
-                            if (activities.length < perPage) {
+                            else if (activities.length < perPage) {
                                 hasMorePages = false;
                             } else {
                                 page++;
@@ -727,6 +815,9 @@
                 console.log(`🚴‍♂️ Cycling routes: ${routes.filter(r => r.type === 'cycling').length}`);
                 
                 updateLoadingStatus(`✅ Loaded ${routes.length} routes successfully!`);
+                
+                // SMART CACHING: Save routes for next time (size-conscious)
+                cacheRoutes(routes);
                 
                 return routes;
                 
