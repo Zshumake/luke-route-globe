@@ -496,12 +496,37 @@
                 console.log('🔍 Debug: Viewer object exists:', !!viewer);
                 console.log('🔍 Debug: Viewer scene exists:', !!viewer.scene);
                 console.log('🔍 Debug: Viewer globe exists:', !!viewer.scene.globe);
-                console.log('🔍 Debug: Imagery layers count:', viewer.imageryLayers.length);
+                console.log('🔍 Debug: Imagery layers count:', viewer.scene.imageryLayers.length);
                 
-                if (viewer.imageryLayers.length > 0) {
-                    const layer0 = viewer.imageryLayers.get(0);
-                    console.log('🔍 Debug: Layer 0 imagery provider:', layer0.imageryProvider.constructor.name);
+                // CRITICAL DEBUG: Check if imagery provider is actually in the viewer
+                if (viewer.scene.imageryLayers.length > 0) {
+                    const layer0 = viewer.scene.imageryLayers.get(0);
+                    console.log('✅ Debug: Layer 0 exists - provider:', layer0.imageryProvider.constructor.name);
                     console.log('🔍 Debug: Layer 0 ready:', layer0.imageryProvider.ready);
+                    console.log('🔍 Debug: Layer 0 alpha:', layer0.alpha);
+                    console.log('🔍 Debug: Layer 0 show:', layer0.show);
+                } else {
+                    console.error('❌ CRITICAL ISSUE: Imagery provider loaded but NOT in viewer layers!');
+                    console.log('🔧 FIXING: Manually adding Asset ID 3 to viewer...');
+                    
+                    // The imagery provider exists but wasn't added to the viewer - fix this
+                    try {
+                        const fixImageryProvider = await Cesium.IonImageryProvider.fromAssetId(3, {
+                            maximumLevel: 20
+                        });
+                        const fixLayer = viewer.scene.imageryLayers.addImageryProvider(fixImageryProvider);
+                        console.log('✅ FIXED: Asset ID 3 manually added to viewer');
+                        console.log('🔍 Fixed layers count:', viewer.scene.imageryLayers.length);
+                        viewer.scene.requestRender();
+                    } catch (fixError) {
+                        console.error('❌ Fix failed:', fixError.message);
+                        // Add OpenStreetMap as absolute fallback
+                        const osmProvider = new Cesium.OpenStreetMapImageryProvider({
+                            url: 'https://tile.openstreetmap.org/'
+                        });
+                        viewer.scene.imageryLayers.addImageryProvider(osmProvider);
+                        console.log('✅ FALLBACK: OpenStreetMap added');
+                    }
                 }
 
                 // Configure the globe for optimal satellite imagery performance
