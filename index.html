@@ -463,7 +463,10 @@
         // Load ALL of Luke's routes from Strava (with pagination)
         async function loadStravaRoutes() {
             try {
-                console.log('🚴‍♂️ Loading ALL of Luke\'s routes from Strava...');
+                console.log('🚴‍♂️ Loading ALL routes from Strava...');
+                console.log('🔍 DEBUG: Checking authentication status...');
+                console.log('🔍 DEBUG: Access token exists:', !!stravaAPI.accessToken);
+                console.log('🔍 DEBUG: Access token length:', stravaAPI.accessToken ? stravaAPI.accessToken.length : 0);
                 
                 // Check if already authenticated
                 if (!stravaAPI.isAuthenticated()) {
@@ -485,27 +488,52 @@
                 
                 while (hasMorePages) {
                     console.log(`📄 Loading page ${page} of activities...`);
-                    const activities = await stravaAPI.getActivities(page, perPage);
                     
-                    if (activities.length === 0) {
-                        hasMorePages = false;
-                        console.log('✅ Reached end of activities');
-                    } else {
-                        allActivities.push(...activities);
-                        console.log(`📊 Loaded ${activities.length} activities from page ${page} (Total: ${allActivities.length})`);
+                    try {
+                        const activities = await stravaAPI.getActivities(page, perPage);
+                        console.log(`🔍 DEBUG: API returned ${activities.length} activities for page ${page}`);
                         
-                        // Update progress
-                        updateLoadingStatus(`Loaded ${allActivities.length} activities...`);
-                        
-                        // If we got less than perPage activities, we're on the last page
-                        if (activities.length < perPage) {
-                            hasMorePages = false;
-                        } else {
-                            page++;
+                        // Log first few activities for debugging
+                        if (activities.length > 0) {
+                            console.log('🔍 DEBUG: Sample activities:', activities.slice(0, 3).map(a => ({
+                                name: a.name,
+                                type: a.sport_type,
+                                has_map: !!a.map,
+                                has_polyline: !!(a.map && a.map.summary_polyline),
+                                distance: a.distance,
+                                start_date: a.start_date
+                            })));
                         }
                         
-                        // Rate limiting between pages
-                        await new Promise(resolve => setTimeout(resolve, 200));
+                        if (activities.length === 0) {
+                            hasMorePages = false;
+                            console.log('✅ Reached end of activities');
+                        } else {
+                            allActivities.push(...activities);
+                            console.log(`📊 Loaded ${activities.length} activities from page ${page} (Total: ${allActivities.length})`);
+                            
+                            // Update progress
+                            updateLoadingStatus(`Loaded ${allActivities.length} activities...`);
+                            
+                            // If we got less than perPage activities, we're on the last page
+                            if (activities.length < perPage) {
+                                hasMorePages = false;
+                            } else {
+                                page++;
+                            }
+                            
+                            // Rate limiting between pages
+                            await new Promise(resolve => setTimeout(resolve, 200));
+                        }
+                    } catch (pageError) {
+                        console.error(`❌ Error loading page ${page}:`, pageError);
+                        hasMorePages = false;
+                        
+                        // If it's an auth error, clear tokens
+                        if (pageError.message.includes('token expired') || pageError.message.includes('401')) {
+                            console.log('🔄 Token expired, clearing authentication...');
+                            stravaAPI.clearTokens();
+                        }
                     }
                 }
                 
@@ -537,13 +565,22 @@
                         
                         const route = transformStravaActivity(activity, streamData);
                         
+                        // Debug route processing
+                        console.log(`🔍 PROCESSING: ${route.name}`);
+                        console.log(`🔍 - Type: ${route.type}`);
+                        console.log(`🔍 - Has map: ${!!(activity.map)}`);
+                        console.log(`🔍 - Has polyline: ${!!(activity.map && activity.map.summary_polyline)}`);
+                        console.log(`🔍 - Stream data: ${!!streamData}`);
+                        console.log(`🔍 - Coordinates: ${route.coordinates ? route.coordinates.length : 0} points`);
+                        
                         // Only include activities with GPS coordinates
                         if (route.coordinates && route.coordinates.length > 0) {
                             routes.push(route);
-                            console.log(`✅ Added route: ${route.name} (${route.type}) - ${route.date}`);
+                            console.log(`✅ ADDED GPS ROUTE: ${route.name} (${route.type}) - ${route.coordinates.length} points`);
                         } else {
                             // Still add activities without GPS for list visibility (indoor workouts, etc.)
                             routes.push(transformStravaActivity(activity));
+                            console.log(`⚠️ ADDED NON-GPS ACTIVITY: ${route.name} (${route.type}) - No coordinates`);
                         }
                         
                         // Rate limiting - wait between requests (respect API limits)
