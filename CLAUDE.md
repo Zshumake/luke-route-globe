@@ -14,20 +14,34 @@ Create a high-fidelity 3D globe application for visualizing Luke's athletic rout
 
 ### 🌍 CORE TECHNICAL SPECIFICATIONS
 
-#### Cesium Configuration (REQUIRED)
+#### Cesium Configuration (VERIFIED WORKING - September 2025)
 ```javascript
-// PRIMARY IMAGERY - NEVER CHANGE THIS TO "SIMPLE" ALTERNATIVES
-imageryProvider: await Cesium.BingMapsImageryProvider.fromUrl('https://dev.virtualearth.net', {
-    key: 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf',
-    mapStyle: Cesium.BingMapsStyle.AERIAL,
-    maximumLevel: 20 // CRITICAL for detailed zoom
+// PRIMARY IMAGERY - CONFIRMED WORKING WITH USER'S ION ACCOUNT
+// Strategy 1: Ion Asset ID 3 (Bing Maps Aerial with Labels) - HIGH RESOLUTION
+imageryProvider: await Cesium.IonImageryProvider.fromAssetId(3, {
+    maximumLevel: 20  // Street-level zoom for high fidelity
 }),
 
-// HIGH-RESOLUTION TERRAIN
-terrainProvider: await Cesium.createWorldTerrainAsync({
-    requestWaterMask: true,
-    requestVertexNormals: true
-}),
+// FALLBACK IMAGERY OPTIONS (in order of preference)
+// Strategy 2: Ion Asset ID 2 (Bing Maps Aerial - no labels)  
+// Strategy 3: Ion Asset ID 4 (Bing Maps Road)
+
+// TERRAIN PROVIDER - WORKING CONFIGURATION
+// Use user's specific Asset ID 1 (Cesium World Terrain)
+terrainProvider: await Cesium.CesiumTerrainProvider.fromIonAssetId(1),
+// Fallback: new Cesium.EllipsoidTerrainProvider() if Asset ID 1 fails
+```
+
+#### ❌ CONFIGURATIONS THAT DO NOT WORK
+```javascript
+// ❌ DO NOT USE - These cause 404 Asset ID 1 endpoint errors:
+await Cesium.createWorldTerrainAsync()  // Hardcoded Asset ID 1 endpoint
+await Cesium.createWorldImageryAsync()  // Hardcoded Asset ID 1 endpoint
+
+// ❌ DO NOT USE - Direct Bing Maps API fails with metadata errors:
+Cesium.BingMapsImageryProvider.fromUrl('https://dev.virtualearth.net', {
+    key: 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf'
+})
 ```
 
 #### Globe Optimization Settings (REQUIRED)
@@ -118,11 +132,35 @@ The application is successful when:
 - Cache imagery tiles appropriately
 - Request renders after route changes
 
-#### Token Information
-- Cesium Ion Token: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNGM2ZmUwZC0zNmI5LTQ4MTQtYjkyNy1kZTMyNTc0MWIyYWUiLCJpZCI6MzM2NzUyLCJpYXQiOjE3NTY1NTU3OTh9.zrnBs58tnAJxGy2FWSpWP5KD8JRTCskZJ1sMt3rUsT8`
+#### Cesium Ion Account Details (CRITICAL - DO NOT CHANGE)
+- **Cesium Ion Token**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNGM2ZmUwZC0zNmI5LTQ4MTQtYjkyNy1kZTMyNTc0MWIyYWUiLCJpZCI6MzM2NzUyLCJpYXQiOjE3NTY1NTU3OTh9.zrnBs58tnAJxGy2FWSpWP5KD8JRTCskZJ1sMt3rUsT8`
 - **Token Name**: "Luke's World Map" 
-- **Permissions**: assets:read, assets:source, access to Bing Maps Aerial imagery
-- GitHub Pages URL: `https://zshumake.github.io/luke-route-globe/`
+- **Account Storage**: 0.00 GiB of 5.00 GiB used
+- **GitHub Pages URL**: `https://zshumake.github.io/luke-route-globe/`
+
+#### Available Ion Assets (Confirmed Working)
+| Asset ID | Name | Type | Date Added | Status |
+|----------|------|------|------------|--------|
+| **3** | **Bing Maps Aerial with Labels** | **Imagery** | Oct 27 2016 | ✅ **PRIMARY - Use This** |
+| **2** | **Bing Maps Aerial** | **Imagery** | Oct 27 2016 | ✅ **Fallback Option** |
+| **4** | **Bing Maps Road** | **Imagery** | Oct 27 2016 | ⚠️ Roads Only |
+| **1** | **Cesium World Terrain** | **Terrain** | Oct 17 2016 | ✅ **Terrain Provider** |
+| 2275207 | Google Photorealistic 3D Tiles | 3D Tiles | Sep 12 2023 | ⚠️ 3D Buildings |
+| 96188 | Cesium OSM Buildings | 3D Tiles | Apr 30 2020 | ⚠️ 3D Buildings |
+
+#### Token Permissions (Verified)
+- `archives:read`, `archives:write`
+- `assets:limited-list`, `assets:list`, `assets:read`, `assets:source`, `assets:write`
+- `exports:read`, `exports:write`
+- `geocode`, `profile:read`
+- `tokens:read`, `tokens:write`
+- **Specific Asset Access**: Bing Maps Aerial, Bing Maps Aerial with Labels, Bing Maps Road
+
+#### Usage Statistics (Last Updated: Sep 2025)
+- **Bing Maps Sessions**: 41 sessions used (good quota remaining)
+- **Google Photorealistic 3D Tiles**: 36 Tiles sessions used
+- **Data Streaming**: 0.34 MiB total
+- **Geocodes**: 0 geocodes used
 
 ## 🎯 CESIUM ION ACCOUNT OPTIMIZATION (2024 Best Practices)
 
