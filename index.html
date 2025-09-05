@@ -1796,14 +1796,29 @@
         
         // Calculate total distances for different activity types
         function calculateTotalDistances() {
-            const cyclingRoutes = sampleRoutes.filter(route => route.type === 'cycling');
-            const runningRoutes = sampleRoutes.filter(route => route.type === 'running');
-            
-            const cyclingDistance = cyclingRoutes.reduce((sum, route) => sum + route.distance, 0);
-            const runningDistance = runningRoutes.reduce((sum, route) => sum + route.distance, 0);
-            const totalDistance = cyclingDistance + runningDistance;
-            
-            return { cyclingDistance, runningDistance, totalDistance };
+            try {
+                if (!sampleRoutes || sampleRoutes.length === 0) {
+                    console.warn('⚠️ No routes available for distance calculation');
+                    return { cyclingDistance: 0, runningDistance: 0, totalDistance: 0 };
+                }
+                
+                const cyclingRoutes = sampleRoutes.filter(route => route && route.type === 'cycling' && typeof route.distance === 'number');
+                const runningRoutes = sampleRoutes.filter(route => route && route.type === 'running' && typeof route.distance === 'number');
+                
+                const cyclingDistance = cyclingRoutes.reduce((sum, route) => sum + (route.distance || 0), 0);
+                const runningDistance = runningRoutes.reduce((sum, route) => sum + (route.distance || 0), 0);
+                const totalDistance = cyclingDistance + runningDistance;
+                
+                console.log(`📊 Distance calculation:`);
+                console.log(`📊 - Cycling: ${cyclingRoutes.length} routes, ${cyclingDistance.toFixed(1)}km`);
+                console.log(`📊 - Running: ${runningRoutes.length} routes, ${runningDistance.toFixed(1)}km`);
+                console.log(`📊 - Total: ${totalDistance.toFixed(1)}km`);
+                
+                return { cyclingDistance, runningDistance, totalDistance };
+            } catch (error) {
+                console.error('❌ Error calculating distances:', error);
+                return { cyclingDistance: 0, runningDistance: 0, totalDistance: 0 };
+            }
         }
         
         // Convert distance in km to degrees around the equator
@@ -1813,155 +1828,249 @@
         
         // Clear any existing world distance visualization
         function clearWorldDistanceVisualization() {
-            // Stop any running animation
-            if (worldDistanceAnimation) {
-                clearInterval(worldDistanceAnimation);
-                worldDistanceAnimation = null;
+            try {
+                console.log('🧽 CLEARING world distance visualization...');
+                
+                // Stop any running animation
+                if (worldDistanceAnimation) {
+                    clearInterval(worldDistanceAnimation);
+                    worldDistanceAnimation = null;
+                    console.log('✅ Animation stopped');
+                }
+                
+                // Remove all world distance entities safely
+                if (viewer && viewer.entities && worldDistanceEntities.length > 0) {
+                    worldDistanceEntities.forEach((entity, index) => {
+                        try {
+                            if (entity && viewer.entities.contains(entity)) {
+                                viewer.entities.remove(entity);
+                            }
+                        } catch (entityError) {
+                            console.warn(`⚠️ Error removing entity ${index}:`, entityError);
+                        }
+                    });
+                    console.log(`✅ Removed ${worldDistanceEntities.length} entities`);
+                }
+                
+                worldDistanceEntities = [];
+                
+                // Request render
+                if (viewer && viewer.scene && viewer.scene.requestRender) {
+                    viewer.scene.requestRender();
+                }
+                
+                console.log('✅ World distance visualization cleared successfully');
+                
+            } catch (error) {
+                console.error('❌ Error clearing world distance visualization:', error);
+                // Force clear the arrays even if there were errors
+                worldDistanceEntities = [];
+                if (worldDistanceAnimation) {
+                    clearInterval(worldDistanceAnimation);
+                    worldDistanceAnimation = null;
+                }
             }
-            
-            // Remove all world distance entities
-            worldDistanceEntities.forEach(entity => {
-                viewer.entities.remove(entity);
-            });
-            worldDistanceEntities = [];
-            
-            viewer.scene.requestRender();
-            console.log('🌎 World distance visualization cleared');
         }
         
         // Create animated line showing distance around the world
         function animateDistanceAroundWorld(distanceKm, color, activityType) {
-            clearWorldDistanceVisualization();
-            
-            const totalDegrees = distanceToEquatorDegrees(distanceKm);
-            const timesAroundWorld = distanceKm / EARTH_CIRCUMFERENCE_KM;
-            
-            console.log(`🌎 Animating ${activityType} distance: ${distanceKm.toFixed(1)}km`);
-            console.log(`🌎 Equals ${totalDegrees.toFixed(1)} degrees (${timesAroundWorld.toFixed(2)}x around world)`);
-            
-            // Create info text entity
-            const infoEntity = viewer.entities.add({
-                position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE, 10, 2000000),
-                label: {
-                    text: `${activityType.toUpperCase()}\n${distanceKm.toFixed(1)} km\n${timesAroundWorld.toFixed(2)}x around world`,
-                    font: '16pt sans-serif',
-                    fillColor: Cesium.Color.WHITE,
-                    outlineColor: Cesium.Color.BLACK,
-                    outlineWidth: 2,
-                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                    pixelOffset: new Cesium.Cartesian2(0, -50)
+            try {
+                console.log(`🌎 STARTING ${activityType} animation: ${distanceKm.toFixed(1)}km`);
+                
+                // Safety checks
+                if (!viewer || !viewer.entities) {
+                    console.error('❌ Viewer or entities not available');
+                    return;
                 }
-            });
-            
-            worldDistanceEntities.push(infoEntity);
-            
-            // Animation parameters
-            let currentDegrees = 0;
-            const animationSpeed = Math.max(totalDegrees / 200, 0.5);
-            const degreesPerFrame = Math.min(animationSpeed, 10);
-            
-            // Create animated polyline
-            worldDistanceAnimation = setInterval(() => {
-                currentDegrees += degreesPerFrame;
                 
-                // Handle multiple laps around the world
-                let remainingDegrees = currentDegrees;
-                let lapCount = 0;
+                if (distanceKm <= 0) {
+                    console.warn(`⚠️ No distance to display for ${activityType}`);
+                    return;
+                }
                 
-                while (remainingDegrees > 0) {
-                    const currentLapDegrees = Math.min(remainingDegrees, 360);
-                    const endLongitude = EQUATOR_START_LONGITUDE + currentLapDegrees;
-                    
-                    // Create positions for this lap
-                    const lapPositions = [];
-                    for (let lng = EQUATOR_START_LONGITUDE; lng <= endLongitude; lng += 2) {
-                        const adjustedLng = ((lng + 180) % 360) - 180; // Wrap longitude
-                        lapPositions.push(Cesium.Cartesian3.fromDegrees(adjustedLng, 0, 50000 + (lapCount * 10000)));
-                    }
-                    
-                    if (lapPositions.length > 1) {
-                        // Create or update polyline for this lap
-                        let lapEntity = worldDistanceEntities.find(e => e.name === `lap-${lapCount}`);
-                        if (!lapEntity) {
-                            lapEntity = viewer.entities.add({
-                                name: `lap-${lapCount}`,
+                clearWorldDistanceVisualization();
+                
+                const totalDegrees = distanceToEquatorDegrees(distanceKm);
+                const timesAroundWorld = distanceKm / EARTH_CIRCUMFERENCE_KM;
+                
+                console.log(`🌎 Equals ${totalDegrees.toFixed(1)} degrees (${timesAroundWorld.toFixed(2)}x around world)`);
+                
+                // Create info text entity with error handling
+                let infoEntity;
+                try {
+                    infoEntity = viewer.entities.add({
+                        position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE, 10, 2000000),
+                        label: {
+                            text: `${activityType.toUpperCase()}\n${distanceKm.toFixed(1)} km\n${timesAroundWorld.toFixed(2)}x around world`,
+                            font: '14pt sans-serif',
+                            fillColor: Cesium.Color.WHITE,
+                            outlineColor: Cesium.Color.BLACK,
+                            outlineWidth: 2,
+                            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                            pixelOffset: new Cesium.Cartesian2(0, -50)
+                        }
+                    });
+                    worldDistanceEntities.push(infoEntity);
+                    console.log('✅ Info entity created successfully');
+                } catch (entityError) {
+                    console.error('❌ Error creating info entity:', entityError);
+                    return;
+                }
+                
+                // Animation parameters - SIMPLIFIED for stability
+                let currentDegrees = 0;
+                const animationSpeed = Math.min(totalDegrees / 100, 5); // Slower, more stable
+                const degreesPerFrame = Math.max(animationSpeed, 0.5);
+                
+                console.log(`🌎 Animation params: ${degreesPerFrame} degrees per frame`);
+                
+                // Create SIMPLE animated polyline - no multiple laps for now
+                worldDistanceAnimation = setInterval(() => {
+                    try {
+                        currentDegrees += degreesPerFrame;
+                        
+                        // Simple single-lap visualization
+                        const currentEndLongitude = Math.min(EQUATOR_START_LONGITUDE + currentDegrees, EQUATOR_START_LONGITUDE + totalDegrees);
+                        
+                        // Create positions for current progress
+                        const positions = [];
+                        for (let lng = EQUATOR_START_LONGITUDE; lng <= currentEndLongitude; lng += 5) {
+                            const adjustedLng = ((lng + 180) % 360) - 180; // Wrap longitude
+                            positions.push(Cesium.Cartesian3.fromDegrees(adjustedLng, 0, 100000)); // Fixed height
+                        }
+                        
+                        if (positions.length > 1) {
+                            // Remove existing line
+                            const existingLine = worldDistanceEntities.find(e => e.name === 'distance-line');
+                            if (existingLine) {
+                                viewer.entities.remove(existingLine);
+                                const index = worldDistanceEntities.indexOf(existingLine);
+                                if (index > -1) worldDistanceEntities.splice(index, 1);
+                            }
+                            
+                            // Create new line
+                            const lineEntity = viewer.entities.add({
+                                name: 'distance-line',
                                 polyline: {
-                                    positions: lapPositions,
-                                    width: 8,
-                                    material: lapCount === 0 ? color : color.withAlpha(0.5 - (lapCount * 0.1)),
+                                    positions: positions,
+                                    width: 6,
+                                    material: color,
                                     clampToGround: false,
                                     show: true
                                 }
                             });
-                            worldDistanceEntities.push(lapEntity);
-                        } else {
-                            lapEntity.polyline.positions = lapPositions;
+                            worldDistanceEntities.push(lineEntity);
                         }
+                        
+                        // Update info text with progress
+                        const currentKm = Math.min((currentDegrees / 360) * EARTH_CIRCUMFERENCE_KM, distanceKm);
+                        const progressPercent = (currentKm / distanceKm) * 100;
+                        
+                        if (infoEntity && infoEntity.label) {
+                            infoEntity.label.text = `${activityType.toUpperCase()}\n${currentKm.toFixed(0)} / ${distanceKm.toFixed(0)} km\n${(currentKm / EARTH_CIRCUMFERENCE_KM).toFixed(2)}x around world\n${progressPercent.toFixed(0)}% complete`;
+                        }
+                        
+                        // Request render
+                        if (viewer.scene && viewer.scene.requestRender) {
+                            viewer.scene.requestRender();
+                        }
+                        
+                        // Stop animation when complete
+                        if (currentDegrees >= totalDegrees) {
+                            clearInterval(worldDistanceAnimation);
+                            worldDistanceAnimation = null;
+                            
+                            // Final update to info text
+                            if (infoEntity && infoEntity.label) {
+                                infoEntity.label.text = `${activityType.toUpperCase()} COMPLETE!\n${distanceKm.toFixed(1)} km total\n${timesAroundWorld.toFixed(2)}x around world`;
+                            }
+                            
+                            console.log(`✅ Animation complete for ${activityType}`);
+                        }
+                        
+                    } catch (animationError) {
+                        console.error('❌ Animation error:', animationError);
+                        clearInterval(worldDistanceAnimation);
+                        worldDistanceAnimation = null;
                     }
-                    
-                    remainingDegrees -= 360;
-                    lapCount++;
+                }, 100); // Slower 100ms intervals for stability
+                
+                // Position camera to see the visualization - with safety check
+                try {
+                    viewer.camera.setView({
+                        destination: Cesium.Cartesian3.fromDegrees(-50, 20, 15000000),
+                        orientation: {
+                            heading: 0.0,
+                            pitch: -0.5,
+                            roll: 0.0
+                        }
+                    });
+                    console.log('✅ Camera positioned successfully');
+                } catch (cameraError) {
+                    console.error('❌ Camera positioning error:', cameraError);
                 }
                 
-                // Update info text with progress
-                const currentKm = (currentDegrees / 360) * EARTH_CIRCUMFERENCE_KM;
-                const progressPercent = (currentKm / distanceKm) * 100;
-                
-                infoEntity.label.text = `${activityType.toUpperCase()}\n${currentKm.toFixed(0)} / ${distanceKm.toFixed(0)} km\n${(currentKm / EARTH_CIRCUMFERENCE_KM).toFixed(2)}x around world\n${progressPercent.toFixed(0)}% complete`;
-                
-                viewer.scene.requestRender();
-                
-                // Stop animation when complete
-                if (currentDegrees >= totalDegrees) {
-                    clearInterval(worldDistanceAnimation);
-                    worldDistanceAnimation = null;
-                    
-                    // Final update to info text
-                    infoEntity.label.text = `${activityType.toUpperCase()} COMPLETE!\n${distanceKm.toFixed(1)} km total\n${timesAroundWorld.toFixed(2)}x around world`;
-                    
-                    console.log(`✅ Animation complete for ${activityType}`);
-                }
-            }, 50); // 50ms intervals for smooth animation
-            
-            // Position camera to see the visualization
-            viewer.camera.setView({
-                destination: Cesium.Cartesian3.fromDegrees(-50, 20, 15000000),
-                orientation: {
-                    heading: 0.0,
-                    pitch: -0.5,
-                    roll: 0.0
-                }
-            });
+            } catch (error) {
+                console.error('❌ CRITICAL ERROR in animateDistanceAroundWorld:', error);
+                clearWorldDistanceVisualization();
+            }
         }
         
         // Show cycling distance around world
         function showCyclingAroundWorld() {
-            const { cyclingDistance } = calculateTotalDistances();
-            if (cyclingDistance > 0) {
-                animateDistanceAroundWorld(cyclingDistance, Cesium.Color.BLUE, 'Cycling Distance');
-            } else {
-                console.log('⚠️ No cycling distance to display');
+            try {
+                console.log('🚴‍♂️ CYCLING BUTTON CLICKED - Starting calculation...');
+                const { cyclingDistance } = calculateTotalDistances();
+                
+                if (cyclingDistance > 0) {
+                    console.log(`🚴‍♂️ Starting cycling animation: ${cyclingDistance.toFixed(1)}km`);
+                    animateDistanceAroundWorld(cyclingDistance, Cesium.Color.BLUE, 'Cycling Distance');
+                } else {
+                    console.log('⚠️ No cycling distance to display');
+                    alert('No cycling routes found to visualize!');
+                }
+            } catch (error) {
+                console.error('❌ Error in showCyclingAroundWorld:', error);
+                alert('Error displaying cycling distance. Check console for details.');
             }
         }
         
         // Show running distance around world
         function showRunningAroundWorld() {
-            const { runningDistance } = calculateTotalDistances();
-            if (runningDistance > 0) {
-                animateDistanceAroundWorld(runningDistance, Cesium.Color.RED, 'Running Distance');
-            } else {
-                console.log('⚠️ No running distance to display');
+            try {
+                console.log('🏃‍♂️ RUNNING BUTTON CLICKED - Starting calculation...');
+                const { runningDistance } = calculateTotalDistances();
+                
+                if (runningDistance > 0) {
+                    console.log(`🏃‍♂️ Starting running animation: ${runningDistance.toFixed(1)}km`);
+                    animateDistanceAroundWorld(runningDistance, Cesium.Color.RED, 'Running Distance');
+                } else {
+                    console.log('⚠️ No running distance to display');
+                    alert('No running routes found to visualize!');
+                }
+            } catch (error) {
+                console.error('❌ Error in showRunningAroundWorld:', error);
+                alert('Error displaying running distance. Check console for details.');
             }
         }
         
         // Show total distance around world
         function showTotalAroundWorld() {
-            const { totalDistance } = calculateTotalDistances();
-            if (totalDistance > 0) {
-                animateDistanceAroundWorld(totalDistance, Cesium.Color.PURPLE, 'Total Distance');
-            } else {
-                console.log('⚠️ No distance to display');
+            try {
+                console.log('🌍 TOTAL BUTTON CLICKED - Starting calculation...');
+                const { totalDistance } = calculateTotalDistances();
+                
+                if (totalDistance > 0) {
+                    console.log(`🌍 Starting total animation: ${totalDistance.toFixed(1)}km`);
+                    animateDistanceAroundWorld(totalDistance, Cesium.Color.PURPLE, 'Total Distance');
+                } else {
+                    console.log('⚠️ No total distance to display');
+                    alert('No routes found to visualize!');
+                }
+            } catch (error) {
+                console.error('❌ Error in showTotalAroundWorld:', error);
+                alert('Error displaying total distance. Check console for details.');
             }
         }
         
