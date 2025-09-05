@@ -396,19 +396,23 @@
                     try {
                         // STRATEGY 2: Cesium Ion default Bing Maps (without specific Asset ID)
                         console.log('🗺️ Attempting Cesium Ion default Bing Maps (Strategy 2)...');
-                        imageryProvider = await Cesium.createWorldImageryAsync({
-                            style: Cesium.IonWorldImageryStyle.AERIAL
+                        // Use OpenStreetMap as reliable fallback instead of Ion
+                        imageryProvider = new Cesium.OpenStreetMapImageryProvider({
+                            url: 'https://tile.openstreetmap.org/',
+                            maximumLevel: 18
                         });
-                        console.log('✅ Strategy 2: Cesium Ion Bing Maps loaded successfully');
+                        console.log('✅ Strategy 2: OpenStreetMap fallback loaded successfully');
                         
                     } catch (bingError) {
                         console.warn('⚠️ Strategy 2 failed:', bingError.message);
                     
                         try {
-                            // STRATEGY 3: Cesium Ion World Imagery (reliable)
-                            console.log('🌍 Attempting Cesium Ion World Imagery (Strategy 3)...');
-                            imageryProvider = await Cesium.createWorldImageryAsync();
-                            console.log('✅ Strategy 3: Cesium Ion World Imagery loaded successfully');
+                            // STRATEGY 3: Natural Earth II (local Cesium imagery - no Ion calls)
+                            console.log('🌍 Attempting Natural Earth II (Strategy 3)...');
+                            imageryProvider = new Cesium.TileMapServiceImageryProvider({
+                                url: Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII/')
+                            });
+                            console.log('✅ Strategy 3: Natural Earth II loaded successfully');
                             
                         } catch (cesiumIonError) {
                             console.warn('⚠️ Strategy 3 failed:', cesiumIonError.message);
@@ -451,8 +455,8 @@
                     // Imagery
                     imageryProvider: imageryProvider,
                     
-                    // Terrain (simplified to avoid Ion dependency issues)
-                    terrainProvider: Cesium.Terrain.fromWorldTerrain(),
+                    // No terrain provider to avoid Ion calls completely
+                    terrainProvider: new Cesium.EllipsoidTerrainProvider(),
                     
                     // Rendering
                     requestRenderMode: false,

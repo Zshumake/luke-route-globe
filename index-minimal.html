@@ -6,6 +6,9 @@
     <title>🌍 Luke's Routes - Minimal Test</title>
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Cesium.js"></script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.111/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <meta http-equiv="cache-control" content="no-cache">
+    <meta http-equiv="expires" content="0">
+    <meta http-equiv="pragma" content="no-cache">
     <style>
         html, body, #cesiumContainer {
             width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
@@ -35,6 +38,9 @@
 
         async function initializeMinimalGlobe() {
             try {
+                console.log('🔧 MINIMAL GLOBE DEBUG START');
+                console.log('🔧 Cesium version:', Cesium.VERSION);
+                console.log('🔧 Ion token set:', !!Cesium.Ion.defaultAccessToken);
                 document.getElementById('status').textContent = 'Creating imagery provider...';
                 
                 // Try the simplest possible approach first
@@ -42,25 +48,29 @@
                 
                 try {
                     // Option 1: Direct Bing Maps (should work)
-                    console.log('Trying direct Bing Maps...');
+                    console.log('🔧 Trying direct Bing Maps...');
+                    console.log('🔧 Bing API Key present:', !!('AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf'));
                     imageryProvider = await Cesium.BingMapsImageryProvider.fromUrl('https://dev.virtualearth.net', {
                         key: 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf',
                         mapStyle: Cesium.BingMapsStyle.AERIAL,
                         maximumLevel: 18
                     });
-                    console.log('✅ Bing Maps loaded');
+                    console.log('✅ Bing Maps loaded successfully');
+                    console.log('🔧 Provider ready state:', imageryProvider.ready);
                 } catch (bingError) {
                     console.warn('Bing Maps failed, trying OpenStreetMap...', bingError.message);
                     
                     // Option 2: OpenStreetMap (always works)
+                    console.log('🔧 Fallback to OpenStreetMap');
                     imageryProvider = new Cesium.OpenStreetMapImageryProvider({
                         url: 'https://tile.openstreetmap.org/',
                         maximumLevel: 18
                     });
-                    console.log('✅ OpenStreetMap loaded');
+                    console.log('✅ OpenStreetMap loaded successfully');
                 }
 
                 document.getElementById('status').textContent = 'Creating Cesium viewer...';
+                console.log('🔧 Creating Cesium viewer with minimal config...');
 
                 // Create viewer with minimal configuration
                 const viewer = new Cesium.Viewer('cesiumContainer', {
@@ -77,13 +87,25 @@
                     selectionIndicator: false,
                     infoBox: false
                 });
+                
+                console.log('🔧 Viewer created:', !!viewer);
+                console.log('🔧 Scene ready:', !!viewer.scene);
+                console.log('🔧 Globe ready:', !!viewer.scene.globe);
 
                 // Basic globe configuration
+                console.log('🔧 Configuring globe settings...');
                 viewer.scene.globe.enableLighting = false;
                 viewer.scene.fog.enabled = false;
+                console.log('🔧 Globe lighting disabled, fog disabled');
                 
                 console.log('✅ Viewer created successfully');
                 document.getElementById('status').textContent = '✅ Globe loaded successfully!';
+                
+                // Final validation
+                console.log('🔧 Final viewer state:');
+                console.log('🔧 - Container:', document.getElementById('cesiumContainer'));
+                console.log('🔧 - Canvas present:', !!viewer.canvas);
+                console.log('🔧 - Rendering:', !viewer.useDefaultRenderLoop || viewer.renderingEnabled);
                 
                 // Simple camera position
                 viewer.camera.setView({
