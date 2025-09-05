@@ -448,12 +448,18 @@
                 console.log('🔍 Debug: cesiumContainer element exists:', !!document.getElementById('cesiumContainer'));
                 console.log('🔍 Debug: About to create Viewer with configuration...');
                 console.log('🔍 Debug: Creating terrain provider...');
+                console.log('🔍 Debug: Using Ion Asset ID 1 (Cesium World Terrain) directly...');
                 
-                const terrainProvider = await Cesium.createWorldTerrainAsync({
-                    requestWaterMask: true,
-                    requestVertexNormals: true
-                });
-                console.log('🔍 Debug: Terrain provider created successfully');
+                let terrainProvider;
+                try {
+                    // Try using your specific Asset ID 1 directly
+                    terrainProvider = await Cesium.CesiumTerrainProvider.fromIonAssetId(1);
+                    console.log('✅ Debug: Ion Asset ID 1 terrain loaded successfully');
+                } catch (terrainError) {
+                    console.warn('⚠️ Asset ID 1 terrain failed, using ellipsoid terrain:', terrainError.message);
+                    // Fallback to basic ellipsoid terrain (no 3D features but works)
+                    terrainProvider = new Cesium.EllipsoidTerrainProvider();
+                }
                 
                 viewer = new Cesium.Viewer('cesiumContainer', {
                     // Imagery
