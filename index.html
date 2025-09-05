@@ -37,6 +37,25 @@
             display: flex;
             flex-direction: column;
             box-shadow: 2px 0 20px rgba(0,0,0,0.3);
+            height: 100vh;
+            overflow-y: auto; /* Enable vertical scrolling */
+            overflow-x: hidden; /* Hide horizontal overflow */
+        }
+        
+        /* Custom scrollbar for sidebar */
+        .sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .sidebar::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 4px;
+        }
+        .sidebar::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%);
+            border-radius: 4px;
+        }
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
         }
 
         .sidebar-header {
@@ -280,6 +299,18 @@
                     <button id="restoreEarthBtn" class="filter-btn" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); font-size: 11px; margin-top: 4px; width: 100%;">
                         🌍 Emergency Restore Earth
                     </button>
+                </div>
+                
+                <div class="luke-head-upload" style="margin: 15px 0; text-align: center;">
+                    <div style="font-weight: bold; color: #fbbf24; margin-bottom: 8px;">🧑 Luke's Head Upload</div>
+                    <input type="file" id="lukeHeadUpload" accept="image/*" style="display: none;" />
+                    <button id="uploadLukeHeadBtn" class="filter-btn" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); font-size: 12px; width: 100%;">
+                        📷 Upload Luke's Face
+                    </button>
+                    <div id="lukeHeadPreview" style="margin-top: 8px; display: none;">
+                        <img id="lukeHeadImg" style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid #f59e0b;" />
+                        <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">Ready for animation!</div>
+                    </div>
                 </div>
                 
                 <div class="stats">
@@ -1990,20 +2021,27 @@
                 
                 console.log(`🌎 Equals ${totalDegrees.toFixed(1)} degrees (${timesAroundWorld.toFixed(2)}x around world)`);
                 
-                // Create info text entity with error handling
+                // Create COOL floating info bubble
                 let infoEntity;
                 try {
                     infoEntity = viewer.entities.add({
-                        position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE, 10, 2000000),
+                        position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE - 30, 30, 3000000), // Offset to side
                         label: {
-                            text: `${activityType.toUpperCase()}\n${distanceKm.toFixed(1)} km\n${timesAroundWorld.toFixed(2)}x around world`,
-                            font: '14pt sans-serif',
+                            text: `🎆 ${activityType.toUpperCase()} DISTANCE 🎆\n\n📍 ${distanceKm.toFixed(1)} km total\n🌍 ${timesAroundWorld.toFixed(2)}x around world\n\n${timesAroundWorld >= 1 ? '🎉 AMAZING!' : '💪 KEEP GOING!'}`,
+                            font: 'bold 16pt Arial, sans-serif',
                             fillColor: Cesium.Color.WHITE,
-                            outlineColor: Cesium.Color.BLACK,
-                            outlineWidth: 2,
+                            outlineColor: activityType === 'Cycling Distance' ? Cesium.Color.BLUE : 
+                                          activityType === 'Running Distance' ? Cesium.Color.RED : Cesium.Color.PURPLE,
+                            outlineWidth: 3,
                             style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                            pixelOffset: new Cesium.Cartesian2(0, -50)
+                            verticalOrigin: Cesium.VerticalOrigin.CENTER,
+                            horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+                            pixelOffset: new Cesium.Cartesian2(0, 0),
+                            backgroundColor: activityType === 'Cycling Distance' ? Cesium.Color.BLUE.withAlpha(0.8) : 
+                                             activityType === 'Running Distance' ? Cesium.Color.RED.withAlpha(0.8) : Cesium.Color.PURPLE.withAlpha(0.8),
+                            backgroundPadding: new Cesium.Cartesian2(20, 15),
+                            showBackground: true,
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY // Always visible
                         }
                     });
                     worldDistanceEntities.push(infoEntity);
@@ -2021,48 +2059,202 @@
                 console.log(`🌎 Animation params: ${degreesPerFrame} degrees per frame`);
                 
                 // ULTRA SAFE - Just show static line without animation for now
-                console.log('🌎 Creating STATIC visualization to avoid crashes...');
+                console.log(`🌎 Creating IMPROVED distance line: ${distanceKm.toFixed(1)}km = ${totalDegrees.toFixed(1)} degrees`);
                 
                 try {
-                    // Create static equator line showing full distance
-                    const endLongitude = EQUATOR_START_LONGITUDE + totalDegrees;
                     const positions = [];
                     
-                    // Simple line from start to end
-                    for (let lng = EQUATOR_START_LONGITUDE; lng <= endLongitude && lng <= EQUATOR_START_LONGITUDE + 360; lng += 10) {
-                        const adjustedLng = ((lng + 180) % 360) - 180; // Wrap longitude
-                        positions.push(Cesium.Cartesian3.fromDegrees(adjustedLng, 0, 200000));
+                    // Create visible line along equator showing distance
+                    const stepSize = 3; // Every 3 degrees for smoother line
+                    const maxDegrees = Math.min(totalDegrees, 360); // Don't exceed one full lap
+                    
+                    console.log(`🌎 Building line from ${EQUATOR_START_LONGITUDE} for ${maxDegrees} degrees...`);
+                    
+                    for (let lng = 0; lng <= maxDegrees; lng += stepSize) {
+                        const currentLng = EQUATOR_START_LONGITUDE + lng;
+                        const wrappedLng = ((currentLng + 180) % 360) - 180; // Proper longitude wrapping
+                        positions.push(Cesium.Cartesian3.fromDegrees(wrappedLng, 0, 800000)); // Much higher altitude for visibility
                     }
+                    
+                    console.log(`🌎 Line has ${positions.length} positions`);
                     
                     if (positions.length > 1) {
                         const lineEntity = viewer.entities.add({
                             name: 'distance-line',
                             polyline: {
                                 positions: positions,
-                                width: 8,
-                                material: color.withAlpha(0.8),
+                                width: 12, // Thicker line
+                                material: color,
                                 clampToGround: false,
-                                show: true
+                                show: true,
+                                outline: true,
+                                outlineColor: Cesium.Color.WHITE.withAlpha(0.5),
+                                outlineWidth: 3
                             }
                         });
                         worldDistanceEntities.push(lineEntity);
-                        console.log('✅ Static distance line created');
+                        console.log(`✅ THICK distance line created with ${positions.length} positions at 800km altitude`);
+                    } else {
+                        console.error('❌ Not enough positions for line - check degree calculation');
+                        return;
                     }
                     
-                    // Update info text to final state immediately
-                    if (infoEntity && infoEntity.label) {
-                        infoEntity.label.text = `${activityType.toUpperCase()}\n${distanceKm.toFixed(1)} km total\n${timesAroundWorld.toFixed(2)}x around world\nSTATIC DISPLAY`;
-                    }
+                    // 🎆 EPIC PROGRESSIVE ANIMATION WITH LUKE'S HEAD! 🎆
+                    console.log('🎆 Starting LEGENDARY progressive line + spinning earth + Luke head animation!');
                     
-                    // Request render once
-                    if (viewer.scene && viewer.scene.requestRender) {
-                        viewer.scene.requestRender();
-                    }
+                    // Remove the full static line - we'll draw it progressively!
+                    viewer.entities.remove(lineEntity);
+                    const lineIndex = worldDistanceEntities.indexOf(lineEntity);
+                    if (lineIndex > -1) worldDistanceEntities.splice(lineIndex, 1);
                     
-                    console.log(`✅ Static visualization complete for ${activityType}`);
+                    // Get Luke's uploaded image or use default
+                    const lukeHeadImg = document.getElementById('lukeHeadImg');
+                    const hasCustomImage = lukeHeadImg && lukeHeadImg.src && !lukeHeadImg.src.includes('data:');
                     
-                } catch (staticError) {
-                    console.error('❌ Static visualization error:', staticError);
+                    // Add Luke's head marker with uploaded image or emoji
+                    const lukeHeadEntity = viewer.entities.add({
+                        position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE, 0, 800000),
+                        billboard: hasCustomImage ? {
+                            image: lukeHeadImg.src,
+                            width: 80,
+                            height: 80,
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY
+                        } : undefined,
+                        point: !hasCustomImage ? {
+                            pixelSize: 30,
+                            color: Cesium.Color.GOLD,
+                            outlineColor: Cesium.Color.BLACK,
+                            outlineWidth: 4,
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY
+                        } : undefined,
+                        label: {
+                            text: hasCustomImage ? '' : '🧑 LUKE',
+                            font: 'bold 14pt Arial',
+                            fillColor: Cesium.Color.WHITE,
+                            outlineColor: Cesium.Color.BLACK,
+                            outlineWidth: 2,
+                            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                            pixelOffset: new Cesium.Cartesian2(0, hasCustomImage ? -50 : -15)
+                        }
+                    });
+                    worldDistanceEntities.push(lukeHeadEntity);
+                    
+                    // Create mile counter bubble
+                    const mileCounterEntity = viewer.entities.add({
+                        position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE - 40, 40, 4000000),
+                        label: {
+                            text: '🏁 MILES: 0 / ' + (distanceKm * 0.621371).toFixed(0) + '\n🏃‍♂️ GO LUKE GO!',
+                            font: 'bold 18pt Arial',
+                            fillColor: Cesium.Color.WHITE,
+                            outlineColor: Cesium.Color.GREEN,
+                            outlineWidth: 3,
+                            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                            backgroundColor: Cesium.Color.GREEN.withAlpha(0.8),
+                            backgroundPadding: new Cesium.Cartesian2(15, 10),
+                            showBackground: true,
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY
+                        }
+                    });
+                    worldDistanceEntities.push(mileCounterEntity);
+                    
+                    // Start PROGRESSIVE ANIMATION with everything!
+                    let currentAnimationDegrees = 0;
+                    let progressiveLinePositions = [];
+                    const animationSpeed = Math.min(totalDegrees / 120, 3); // Slower for better viewing
+                    const totalMiles = distanceKm * 0.621371;
+                    
+                    const epicAnimation = setInterval(() => {
+                        try {
+                            currentAnimationDegrees += animationSpeed;
+                            
+                            // 1. PROGRESSIVE LINE DRAWING
+                            const currentEndLng = EQUATOR_START_LONGITUDE + currentAnimationDegrees;
+                            const wrappedEndLng = ((currentEndLng + 180) % 360) - 180;
+                            
+                            // Add new position to growing line
+                            progressiveLinePositions.push(Cesium.Cartesian3.fromDegrees(wrappedEndLng, 0, 800000));
+                            
+                            // Remove old line and create new growing line
+                            const existingLine = worldDistanceEntities.find(e => e.name === 'progressive-line');
+                            if (existingLine) {
+                                viewer.entities.remove(existingLine);
+                                const index = worldDistanceEntities.indexOf(existingLine);
+                                if (index > -1) worldDistanceEntities.splice(index, 1);
+                            }
+                            
+                            if (progressiveLinePositions.length > 1) {
+                                const progressiveLine = viewer.entities.add({
+                                    name: 'progressive-line',
+                                    polyline: {
+                                        positions: progressiveLinePositions,
+                                        width: 12,
+                                        material: color,
+                                        clampToGround: false,
+                                        show: true
+                                    }
+                                });
+                                worldDistanceEntities.push(progressiveLine);
+                            }
+                            
+                            // 2. MOVE LUKE'S HEAD along the line
+                            lukeHeadEntity.position = Cesium.Cartesian3.fromDegrees(wrappedEndLng, 0, 800000);
+                            
+                            // 3. SPIN THE EARTH to follow Luke!
+                            const currentHeading = Cesium.Math.toRadians(-currentAnimationDegrees * 0.8);
+                            viewer.scene.camera.setView({
+                                destination: viewer.camera.position,
+                                orientation: {
+                                    heading: currentHeading,
+                                    pitch: viewer.camera.pitch,
+                                    roll: viewer.camera.roll
+                                }
+                            });
+                            
+                            // 4. UPDATE MILE COUNTER TICKER
+                            const currentMiles = (currentAnimationDegrees / totalDegrees) * totalMiles;
+                            const progress = Math.min((currentAnimationDegrees / totalDegrees) * 100, 100);
+                            
+                            mileCounterEntity.label.text = `🏁 MILES: ${currentMiles.toFixed(0)} / ${totalMiles.toFixed(0)}\n💪 ${progress.toFixed(0)}% COMPLETE!`;
+                            
+                            // 5. Update progress bubble with motivation
+                            if (infoEntity && infoEntity.label) {
+                                const motivationalText = progress < 20 ? '🏃‍♂️ Luke is warming up!' :
+                                                         progress < 40 ? '💪 Building momentum!' :
+                                                         progress < 60 ? '🚀 Luke is crushing it!' :
+                                                         progress < 80 ? '🔥 On fire now!' :
+                                                         progress < 100 ? '🎆 Almost legendary!' :
+                                                         '🎉 ABSOLUTE LEGEND!';
+                                
+                                infoEntity.label.text = `🎆 ${activityType.toUpperCase()} 🎆\n\n📍 ${distanceKm.toFixed(1)} km total\n🌍 ${timesAroundWorld.toFixed(2)}x around world\n\n${motivationalText}`;
+                            }
+                            
+                            viewer.scene.requestRender();
+                            
+                            // 6. EPIC CELEBRATION when complete!
+                            if (currentAnimationDegrees >= totalDegrees) {
+                                clearInterval(epicAnimation);
+                                worldDistanceAnimation = null;
+                                console.log('🎉 CELEBRATION TIME! Luke finished his epic journey!');
+                                
+                                // Start CONFETTI and HEAD ROCKING celebration!
+                                startEpicCelebration(lukeHeadEntity, infoEntity, mileCounterEntity, activityType, distanceKm, timesAroundWorld, totalMiles);
+                            }
+                            
+                        } catch (animError) {
+                            console.error('❌ Animation error:', animError);
+                            clearInterval(epicAnimation);
+                            worldDistanceAnimation = null;
+                        }
+                    }, 100); // Smooth 100ms intervals
+                    
+                    // Store animation for cleanup
+                    worldDistanceAnimation = spinAnimation;
+                    
+                    console.log(`✅ Epic spinning visualization started for ${activityType}!`);
+                    
+                } catch (error) {
+                    console.error('❌ Visualization error:', error);
                 }
                 
                 // DO NOT move camera - this was causing Earth to disappear
@@ -2072,6 +2264,95 @@
                 console.error('❌ CRITICAL ERROR in animateDistanceAroundWorld:', error);
                 clearWorldDistanceVisualization();
             }
+        }
+        
+        // 🎆 EPIC CELEBRATION with confetti and head rocking!
+        function startEpicCelebration(lukeHeadEntity, infoEntity, mileCounterEntity, activityType, distanceKm, timesAroundWorld, totalMiles) {
+            console.log('🎉 STARTING EPIC CELEBRATION!');
+            
+            let celebrationFrame = 0;
+            const confettiEntities = [];
+            
+            // Update final messages
+            if (infoEntity && infoEntity.label) {
+                infoEntity.label.text = `🎆 ${activityType.toUpperCase()} COMPLETE! 🎆\n\n📍 ${distanceKm.toFixed(1)} km total\n🌍 ${timesAroundWorld.toFixed(2)}x around world\n\n🎉 LUKE IS AN ABSOLUTE LEGEND! 🎉`;
+            }
+            
+            if (mileCounterEntity && mileCounterEntity.label) {
+                mileCounterEntity.label.text = `🎆 FINAL SCORE 🎆\n${totalMiles.toFixed(0)} MILES CRUSHED!\n🎉 LEGENDARY! 🎉`;
+                mileCounterEntity.label.backgroundColor = Cesium.Color.GOLD.withAlpha(0.9);
+            }
+            
+            const celebrationAnimation = setInterval(() => {
+                try {
+                    celebrationFrame++;
+                    
+                    // 1. ROCK LUKE'S HEAD back and forth
+                    if (lukeHeadEntity) {
+                        const currentPos = lukeHeadEntity.position.getValue(viewer.clock.currentTime);
+                        const cartographic = Cesium.Cartographic.fromCartesian(currentPos);
+                        const rockingOffset = Math.sin(celebrationFrame * 0.3) * 0.02; // Rock back and forth
+                        const newHeight = 800000 + Math.sin(celebrationFrame * 0.2) * 100000; // Bob up and down
+                        
+                        lukeHeadEntity.position = Cesium.Cartesian3.fromRadians(
+                            cartographic.longitude + rockingOffset,
+                            cartographic.latitude,
+                            newHeight
+                        );
+                    }
+                    
+                    // 2. SPAWN CONFETTI around the globe!
+                    if (celebrationFrame % 3 === 0) { // Every 3 frames
+                        for (let i = 0; i < 5; i++) {
+                            const randomLng = (Math.random() - 0.5) * 360;
+                            const randomLat = (Math.random() - 0.5) * 180;
+                            const confettiHeight = 1000000 + Math.random() * 2000000;
+                            
+                            const confetti = viewer.entities.add({
+                                position: Cesium.Cartesian3.fromDegrees(randomLng, randomLat, confettiHeight),
+                                point: {
+                                    pixelSize: 8 + Math.random() * 8,
+                                    color: [Cesium.Color.RED, Cesium.Color.BLUE, Cesium.Color.YELLOW, 
+                                           Cesium.Color.GREEN, Cesium.Color.MAGENTA, Cesium.Color.CYAN][Math.floor(Math.random() * 6)],
+                                    disableDepthTestDistance: Number.POSITIVE_INFINITY
+                                }
+                            });
+                            confettiEntities.push(confetti);
+                            worldDistanceEntities.push(confetti);
+                        }
+                    }
+                    
+                    // 3. SPIN THE CELEBRATION text
+                    if (infoEntity && celebrationFrame % 10 === 0) {
+                        const celebrations = [
+                            `🎆 ${activityType.toUpperCase()} LEGEND! 🎆\n\n📍 ${distanceKm.toFixed(1)} km CRUSHED!\n🌍 ${timesAroundWorld.toFixed(2)}x around world\n\n🎉 LUKE IS UNSTOPPABLE! 🎉`,
+                            `🚀 EPIC ${activityType.toUpperCase()}! 🚀\n\n🏆 WORLD-CLASS ATHLETE!\n🌍 ${timesAroundWorld.toFixed(2)}x EARTH DISTANCE\n\n🔥 ABSOLUTE LEGEND! 🔥`,
+                            `🏁 CHAMPION ${activityType.toUpperCase()}! 🏁\n\n💪 ${distanceKm.toFixed(1)}km of PURE POWER!\n🌍 AROUND THE WORLD!\n\n🎆 LUKE THE LEGEND! 🎆`
+                        ];
+                        infoEntity.label.text = celebrations[Math.floor(celebrationFrame / 10) % celebrations.length];
+                    }
+                    
+                    viewer.scene.requestRender();
+                    
+                    // End celebration after 10 seconds
+                    if (celebrationFrame > 100) {
+                        clearInterval(celebrationAnimation);
+                        
+                        // Clean up some confetti but keep the final state
+                        confettiEntities.slice(0, confettiEntities.length * 0.7).forEach(confetti => {
+                            if (viewer.entities.contains(confetti)) {
+                                viewer.entities.remove(confetti);
+                            }
+                        });
+                        
+                        console.log('🎆 Epic celebration complete! Luke is a legend!');
+                    }
+                    
+                } catch (celebrationError) {
+                    console.error('❌ Celebration error:', celebrationError);
+                    clearInterval(celebrationAnimation);
+                }
+            }, 100);
         }
         
         // Show cycling distance around world
@@ -2253,6 +2534,37 @@
             const restoreEarthBtn = document.getElementById('restoreEarthBtn');
             if (restoreEarthBtn) {
                 restoreEarthBtn.addEventListener('click', restoreEarth);
+            }
+            
+            // Luke's head upload functionality
+            const uploadLukeHeadBtn = document.getElementById('uploadLukeHeadBtn');
+            const lukeHeadUpload = document.getElementById('lukeHeadUpload');
+            const lukeHeadPreview = document.getElementById('lukeHeadPreview');
+            const lukeHeadImg = document.getElementById('lukeHeadImg');
+            
+            if (uploadLukeHeadBtn && lukeHeadUpload) {
+                uploadLukeHeadBtn.addEventListener('click', () => {
+                    lukeHeadUpload.click();
+                });
+                
+                lukeHeadUpload.addEventListener('change', (event) => {
+                    const file = event.target.files[0];
+                    if (file && file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            if (lukeHeadImg && lukeHeadPreview) {
+                                lukeHeadImg.src = e.target.result;
+                                lukeHeadPreview.style.display = 'block';
+                                uploadLukeHeadBtn.textContent = '🎆 Luke\'s Face Ready!';
+                                uploadLukeHeadBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+                                console.log('📷 Luke\'s head uploaded and ready for animation!');
+                            }
+                        };
+                        reader.readAsDataURL(file);
+                    } else {
+                        alert('Please select a valid image file!');
+                    }
+                });
             }
         }
 
