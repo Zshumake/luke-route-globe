@@ -336,12 +336,21 @@
             
             // Step 3: Handle OAuth callback and exchange code for token
             async handleAuthCallback() {
+                console.log('🔍 DEBUG: handleAuthCallback called');
+                console.log('🔍 DEBUG: Current URL:', window.location.href);
+                
                 const urlParams = new URLSearchParams(window.location.search);
                 const code = urlParams.get('code');
                 const state = urlParams.get('state');
                 
+                console.log('🔍 DEBUG: OAuth code:', code ? 'Present' : 'Missing');
+                console.log('🔍 DEBUG: OAuth state:', state);
+                
                 if (code && state === 'strava_auth') {
+                    console.log('✅ DEBUG: OAuth callback detected - exchanging code for token...');
+                    
                     try {
+                        console.log('🔍 DEBUG: Making token exchange request...');
                         // Note: In production, this should be done on your backend for security
                         const tokenResponse = await fetch('https://www.strava.com/oauth/token', {
                             method: 'POST',
@@ -354,22 +363,37 @@
                             })
                         });
                         
+                        console.log('🔍 DEBUG: Token response status:', tokenResponse.status);
                         const tokenData = await tokenResponse.json();
+                        console.log('🔍 DEBUG: Token data received:', !!tokenData.access_token);
+                        
+                        if (tokenResponse.status !== 200) {
+                            console.error('❌ Token exchange failed:', tokenData);
+                            return false;
+                        }
                         
                         if (tokenData.access_token) {
+                            console.log('✅ DEBUG: Access token received - storing...');
                             this.accessToken = tokenData.access_token;
                             this.refreshToken = tokenData.refresh_token;
                             
                             localStorage.setItem('strava_access_token', this.accessToken);
                             localStorage.setItem('strava_refresh_token', this.refreshToken);
                             
+                            console.log('✅ DEBUG: Tokens stored in localStorage');
+                            console.log('🔍 DEBUG: Access token length:', this.accessToken.length);
+                            
                             // Clean up URL
                             window.history.replaceState({}, document.title, window.location.pathname);
                             return true;
+                        } else {
+                            console.error('❌ No access token in response:', tokenData);
                         }
                     } catch (error) {
-                        console.error('Strava authentication failed:', error);
+                        console.error('❌ Strava authentication failed:', error);
                     }
+                } else {
+                    console.log('⚠️ DEBUG: No OAuth callback detected (missing code or wrong state)');
                 }
                 return false;
             }
@@ -442,6 +466,26 @@
         
         // Initialize Strava API
         const stravaAPI = new StravaAPI();
+        
+        // Debug function to check authentication status (call from console)
+        window.checkStravaAuth = function() {
+            console.log('🔍 DEBUG: Checking Strava authentication status...');
+            console.log('🔍 DEBUG: localStorage access token:', localStorage.getItem('strava_access_token') ? 'Present' : 'Missing');
+            console.log('🔍 DEBUG: localStorage refresh token:', localStorage.getItem('strava_refresh_token') ? 'Present' : 'Missing');
+            console.log('🔍 DEBUG: stravaAPI.accessToken:', stravaAPI.accessToken ? 'Present' : 'Missing');
+            console.log('🔍 DEBUG: stravaAPI.isAuthenticated():', stravaAPI.isAuthenticated());
+            
+            if (stravaAPI.accessToken) {
+                console.log('🔍 DEBUG: Access token length:', stravaAPI.accessToken.length);
+                console.log('🔍 DEBUG: Token preview:', stravaAPI.accessToken.substring(0, 10) + '...');
+            }
+            
+            return {
+                hasLocalStorageToken: !!localStorage.getItem('strava_access_token'),
+                hasApiToken: !!stravaAPI.accessToken,
+                isAuthenticated: stravaAPI.isAuthenticated()
+            };
+        };
         
         // Convert Strava activity data to our route format
         function transformStravaActivity(activity, streamData = null) {
