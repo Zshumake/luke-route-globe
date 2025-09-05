@@ -447,16 +447,20 @@
                 console.log('🔍 Debug: Final imagery provider ready:', imageryProvider.ready);
                 console.log('🔍 Debug: cesiumContainer element exists:', !!document.getElementById('cesiumContainer'));
                 console.log('🔍 Debug: About to create Viewer with configuration...');
+                console.log('🔍 Debug: Creating terrain provider...');
+                
+                const terrainProvider = await Cesium.createWorldTerrainAsync({
+                    requestWaterMask: true,
+                    requestVertexNormals: true
+                });
+                console.log('🔍 Debug: Terrain provider created successfully');
                 
                 viewer = new Cesium.Viewer('cesiumContainer', {
                     // Imagery
                     imageryProvider: imageryProvider,
                     
-                    // High-resolution terrain using Ion World Terrain
-                    terrainProvider: await Cesium.createWorldTerrainAsync({
-                        requestWaterMask: true,
-                        requestVertexNormals: true
-                    }),
+                    // Use the terrain provider we just created
+                    terrainProvider: terrainProvider,
                     
                     // Rendering
                     requestRenderMode: false,
