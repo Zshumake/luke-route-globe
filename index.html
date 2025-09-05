@@ -489,6 +489,27 @@
         
         // Convert Strava activity data to our route format
         function transformStravaActivity(activity, streamData = null) {
+            // Debug coordinate data
+            let coordinates = [];
+            if (streamData?.latlng?.data) {
+                coordinates = streamData.latlng.data;
+                console.log(`🔍 COORDINATE DEBUG for ${activity.name}:`);
+                console.log(`🔍 - Raw coordinate count: ${coordinates.length}`);
+                console.log(`🔍 - First few coordinates:`, coordinates.slice(0, 3));
+                console.log(`🔍 - Coordinate format:`, typeof coordinates[0], coordinates[0]);
+                
+                // Check if coordinates need to be transformed
+                if (coordinates.length > 0) {
+                    const firstCoord = coordinates[0];
+                    if (Array.isArray(firstCoord) && firstCoord.length === 2) {
+                        // Coordinates are in [lat, lng] format - need to swap to [lng, lat] for Cesium
+                        console.log(`⚠️ COORDINATE FORMAT: [lat, lng] - swapping to [lng, lat]`);
+                        coordinates = coordinates.map(coord => [coord[1], coord[0]]); // Swap lat/lng
+                    }
+                    console.log(`🔍 - Transformed first coordinate: ${coordinates[0]}`);
+                }
+            }
+            
             return {
                 id: activity.id.toString(),
                 name: activity.name,
@@ -497,7 +518,7 @@
                 time: Math.round(activity.moving_time / 60), // Convert seconds to minutes
                 location: `${activity.start_city || 'Unknown'}, ${activity.start_state || activity.start_country || ''}`.replace(', ,', ','),
                 date: activity.start_date.split('T')[0], // Extract date only
-                coordinates: streamData?.latlng?.data || [], // GPS coordinates from stream
+                coordinates: coordinates, // Processed GPS coordinates
                 elevation_gain: activity.total_elevation_gain,
                 average_speed: activity.average_speed,
                 strava_id: activity.id
