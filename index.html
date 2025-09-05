@@ -512,14 +512,15 @@
                 console.log('🔍 DEBUG: Access token exists:', !!stravaAPI.accessToken);
                 console.log('🔍 DEBUG: Access token length:', stravaAPI.accessToken ? stravaAPI.accessToken.length : 0);
                 
-                // Check if already authenticated
+                // IMPORTANT: Handle OAuth callback FIRST (before checking authentication)
+                console.log('🔍 DEBUG: Checking for OAuth callback before auth check...');
+                await stravaAPI.handleAuthCallback();
+                
+                // Now check if authenticated (after potentially processing callback)
                 if (!stravaAPI.isAuthenticated()) {
                     console.log('⚠️ Not authenticated with Strava - showing sample data');
                     return generateSampleRoutes();
                 }
-                
-                // Handle OAuth callback if present
-                await stravaAPI.handleAuthCallback();
                 
                 // Load ALL activities using pagination
                 const allActivities = [];
