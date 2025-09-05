@@ -365,25 +365,25 @@
                 let imageryProvider = null;
                 
                 try {
-                    // STRATEGY 1: Your Cesium Ion Bing Maps Aerial (you have access to this)
-                    console.log('🗺️ Attempting your Cesium Ion Bing Maps Aerial (Strategy 1)...');
-                    imageryProvider = await Cesium.IonImageryProvider.fromAssetId(1, {
-                        accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNGM2ZmUwZC0zNmI5LTQ4MTQtYjkyNy1kZTMyNTc0MWIyYWUiLCJpZCI6MzM2NzUyLCJpYXQiOjE3NTY1NTU3OTh9.zrnBs58tnAJxGy2FWSpWP5KD8JRTCskZJ1sMt3rUsT8'
+                    // STRATEGY 1: Direct Bing Maps API (most reliable for your use case)
+                    console.log('🗺️ Attempting direct Bing Maps API (Strategy 1)...');
+                    imageryProvider = await Cesium.BingMapsImageryProvider.fromUrl('https://dev.virtualearth.net', {
+                        key: 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf',
+                        mapStyle: Cesium.BingMapsStyle.AERIAL,
+                        maximumLevel: 20
                     });
-                    console.log('✅ Strategy 1: Cesium Ion Bing Maps Aerial loaded successfully');
+                    console.log('✅ Strategy 1: Direct Bing Maps API loaded successfully');
                     
                 } catch (cesiumBingError) {
                     console.warn('⚠️ Strategy 1 failed:', cesiumBingError.message);
                     
                     try {
-                        // STRATEGY 2: Direct Bing Maps API (no Cesium Ion dependency)
-                        console.log('🗺️ Attempting direct Bing Maps API (Strategy 2)...');
-                        imageryProvider = await Cesium.BingMapsImageryProvider.fromUrl('https://dev.virtualearth.net', {
-                            key: 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf',
-                            mapStyle: Cesium.BingMapsStyle.AERIAL,
-                            maximumLevel: 20
+                        // STRATEGY 2: Cesium Ion default Bing Maps (without specific Asset ID)
+                        console.log('🗺️ Attempting Cesium Ion default Bing Maps (Strategy 2)...');
+                        imageryProvider = await Cesium.createWorldImageryAsync({
+                            style: Cesium.IonWorldImageryStyle.AERIAL
                         });
-                        console.log('✅ Strategy 2: Direct Bing Maps loaded successfully');
+                        console.log('✅ Strategy 2: Cesium Ion Bing Maps loaded successfully');
                         
                     } catch (bingError) {
                         console.warn('⚠️ Strategy 2 failed:', bingError.message);
