@@ -300,6 +300,260 @@
         let routeEntities = [];
         let currentFilter = 'all';
         let sampleRoutes = [];
+        
+        // Strava API Configuration
+        const STRAVA_CONFIG = {
+            clientId: '', // Add your Strava App Client ID here
+            clientSecret: '', // Add your Strava App Client Secret here (backend only)
+            redirectUri: window.location.origin + window.location.pathname,
+            scope: 'read,activity:read_all',
+            apiBaseUrl: 'https://www.strava.com/api/v3'
+        };
+        
+        // Strava API Integration Class
+        class StravaAPI {
+            constructor() {
+                this.accessToken = localStorage.getItem('strava_access_token');
+                this.refreshToken = localStorage.getItem('strava_refresh_token');
+            }
+            
+            // Step 1: Check if user is authenticated
+            isAuthenticated() {
+                return !!this.accessToken;
+            }
+            
+            // Step 2: Redirect to Strava for OAuth
+            authenticate() {
+                const authUrl = `https://www.strava.com/oauth/authorize?` +
+                    `client_id=${STRAVA_CONFIG.clientId}&` +
+                    `response_type=code&` +
+                    `redirect_uri=${encodeURIComponent(STRAVA_CONFIG.redirectUri)}&` +
+                    `scope=${STRAVA_CONFIG.scope}&` +
+                    `state=strava_auth`;
+                    
+                window.location.href = authUrl;
+            }
+            
+            // Step 3: Handle OAuth callback and exchange code for token
+            async handleAuthCallback() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const code = urlParams.get('code');
+                const state = urlParams.get('state');
+                
+                if (code && state === 'strava_auth') {
+                    try {
+                        // Note: In production, this should be done on your backend for security
+                        const tokenResponse = await fetch('https://www.strava.com/oauth/token', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                client_id: STRAVA_CONFIG.clientId,
+                                client_secret: STRAVA_CONFIG.clientSecret,
+                                code: code,
+                                grant_type: 'authorization_code'
+                            })
+                        });
+                        
+                        const tokenData = await tokenResponse.json();
+                        
+                        if (tokenData.access_token) {
+                            this.accessToken = tokenData.access_token;
+                            this.refreshToken = tokenData.refresh_token;
+                            
+                            localStorage.setItem('strava_access_token', this.accessToken);
+                            localStorage.setItem('strava_refresh_token', this.refreshToken);
+                            
+                            // Clean up URL
+                            window.history.replaceState({}, document.title, window.location.pathname);
+                            return true;
+                        }
+                    } catch (error) {
+                        console.error('Strava authentication failed:', error);
+                    }
+                }
+                return false;
+            }
+            
+            // Step 4: Fetch Luke's activities from Strava
+            async getActivities(page = 1, perPage = 30) {
+                if (!this.accessToken) {
+                    throw new Error('Not authenticated with Strava');
+                }
+                
+                try {
+                    const response = await fetch(
+                        `${STRAVA_CONFIG.apiBaseUrl}/athlete/activities?page=${page}&per_page=${perPage}`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${this.accessToken}`
+                            }
+                        }
+                    );
+                    
+                    if (response.status === 401) {
+                        // Token expired, clear storage
+                        this.clearTokens();
+                        throw new Error('Strava token expired');
+                    }
+                    
+                    return await response.json();
+                } catch (error) {
+                    console.error('Failed to fetch Strava activities:', error);
+                    throw error;
+                }
+            }
+            
+            // Step 5: Get detailed GPS stream data for a specific activity
+            async getActivityStream(activityId) {
+                if (!this.accessToken) {
+                    throw new Error('Not authenticated with Strava');
+                }
+                
+                try {
+                    const response = await fetch(
+                        `${STRAVA_CONFIG.apiBaseUrl}/activities/${activityId}/streams?keys=latlng&key_by_type=true`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${this.accessToken}`
+                            }
+                        }
+                    );
+                    
+                    if (response.status === 401) {
+                        this.clearTokens();
+                        throw new Error('Strava token expired');
+                    }
+                    
+                    return await response.json();
+                } catch (error) {
+                    console.error('Failed to fetch activity stream:', error);
+                    throw error;
+                }
+            }
+            
+            // Clear stored tokens
+            clearTokens() {
+                this.accessToken = null;
+                this.refreshToken = null;
+                localStorage.removeItem('strava_access_token');
+                localStorage.removeItem('strava_refresh_token');
+            }
+        }
+        
+        // Initialize Strava API
+        const stravaAPI = new StravaAPI();
+        
+        // Convert Strava activity data to our route format
+        function transformStravaActivity(activity, streamData = null) {
+            return {
+                id: activity.id.toString(),
+                name: activity.name,
+                type: activity.sport_type === 'Ride' ? 'cycling' : 'running',
+                distance: Math.round((activity.distance / 1000) * 10) / 10, // Convert meters to km
+                time: Math.round(activity.moving_time / 60), // Convert seconds to minutes
+                location: `${activity.start_city || 'Unknown'}, ${activity.start_state || activity.start_country || ''}`.replace(', ,', ','),
+                date: activity.start_date.split('T')[0], // Extract date only
+                coordinates: streamData?.latlng?.data || [], // GPS coordinates from stream
+                elevation_gain: activity.total_elevation_gain,
+                average_speed: activity.average_speed,
+                strava_id: activity.id
+            };
+        }
+        
+        // Load Luke's real routes from Strava
+        async function loadStravaRoutes() {
+            try {
+                console.log('🚴‍♂️ Loading Luke\'s routes from Strava...');
+                
+                // Check if already authenticated
+                if (!stravaAPI.isAuthenticated()) {
+                    console.log('⚠️ Not authenticated with Strava - showing sample data');
+                    return generateSampleRoutes();
+                }
+                
+                // Handle OAuth callback if present
+                await stravaAPI.handleAuthCallback();
+                
+                const activities = await stravaAPI.getActivities(1, 50); // Get 50 most recent activities
+                console.log(`📊 Loaded ${activities.length} activities from Strava`);
+                
+                const routes = [];
+                const maxRoutes = Math.min(activities.length, 20); // Limit to 20 routes for performance
+                
+                for (let i = 0; i < maxRoutes; i++) {
+                    const activity = activities[i];
+                    
+                    try {
+                        // Get GPS stream data for activities with GPS
+                        let streamData = null;
+                        if (activity.map && activity.map.summary_polyline) {
+                            streamData = await stravaAPI.getActivityStream(activity.id);
+                        }
+                        
+                        const route = transformStravaActivity(activity, streamData);
+                        
+                        // Only include activities with GPS coordinates
+                        if (route.coordinates && route.coordinates.length > 0) {
+                            routes.push(route);
+                            console.log(`✅ Added route: ${route.name} (${route.type})`);
+                        }
+                        
+                        // Rate limiting - wait between requests
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        
+                    } catch (streamError) {
+                        console.warn(`⚠️ Could not load GPS data for ${activity.name}:`, streamError.message);
+                        
+                        // Add activity without GPS data for list visibility
+                        routes.push(transformStravaActivity(activity));
+                    }
+                }
+                
+                console.log(`🎉 Successfully loaded ${routes.length} routes from Strava`);
+                return routes;
+                
+            } catch (error) {
+                console.error('❌ Failed to load Strava routes:', error);
+                console.log('🔄 Falling back to sample data');
+                return generateSampleRoutes();
+            }
+        }
+        
+        // Add Strava authentication UI to sidebar
+        function addStravaAuthButton() {
+            const sidebarHeader = document.querySelector('.sidebar-header');
+            
+            if (!stravaAPI.isAuthenticated()) {
+                const authButton = document.createElement('button');
+                authButton.className = 'strava-auth-btn';
+                authButton.innerHTML = '🔗 Connect to Strava';
+                authButton.style.cssText = `
+                    background: #fc4c02;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    margin-top: 10px;
+                    font-size: 14px;
+                `;
+                
+                authButton.addEventListener('click', () => {
+                    stravaAPI.authenticate();
+                });
+                
+                sidebarHeader.appendChild(authButton);
+            } else {
+                const connectedStatus = document.createElement('div');
+                connectedStatus.innerHTML = '✅ Connected to Strava';
+                connectedStatus.style.cssText = `
+                    color: #4ade80;
+                    font-size: 14px;
+                    margin-top: 10px;
+                `;
+                sidebarHeader.appendChild(connectedStatus);
+            }
+        }
 
         // Sample route data (will be replaced with Luke's real Strava data)
         const generateSampleRoutes = () => {
@@ -668,8 +922,9 @@
                     console.log('Application fully loaded with optimized performance');
                 }, 1000);
 
-                // Initialize UI
-                populateRoutesList();
+                // Initialize UI with Strava integration
+                await initializeRoutes();
+                addStravaAuthButton();
                 updateStats();
                 setupEventListeners();
                 
@@ -692,6 +947,22 @@
                     }
                 }, 3000);
             }
+        }
+        
+        // Initialize routes - try Strava first, fallback to samples
+        async function initializeRoutes() {
+            console.log('🔄 Initializing routes...');
+            
+            try {
+                sampleRoutes = await loadStravaRoutes();
+                console.log(`✅ Routes initialized: ${sampleRoutes.length} routes loaded`);
+            } catch (error) {
+                console.error('❌ Failed to initialize routes:', error);
+                sampleRoutes = generateSampleRoutes();
+                console.log('🔄 Using sample routes as fallback');
+            }
+            
+            populateRoutesList();
         }
 
         // Populate the routes list
