@@ -301,55 +301,105 @@
         let currentFilter = 'all';
         let sampleRoutes = [];
 
-        // Sample route data (will be replaced with Strava API)
+        // Sample route data (will be replaced with Luke's real Strava data)
         const generateSampleRoutes = () => {
             return [
                 {
                     id: '1',
-                    name: 'Central Park Loop',
+                    name: 'Central Park Loop Run',
                     type: 'running',
                     distance: 10.5,
                     time: 45,
                     location: 'New York, NY',
+                    date: '2024-09-01',
                     coordinates: [
-                        [-73.9583, 40.8021],
-                        [-73.9551, 40.7967],
-                        [-73.9497, 40.7851],
-                        [-73.9542, 40.7648],
-                        [-73.9721, 40.7489],
-                        [-73.9818, 40.7589],
-                        [-73.9792, 40.7731],
-                        [-73.9583, 40.8021]
+                        [-73.9583, 40.8021], // North entrance
+                        [-73.9551, 40.7967], // Harlem Meer
+                        [-73.9497, 40.7851], // Great Lawn
+                        [-73.9542, 40.7648], // The Mall
+                        [-73.9721, 40.7489], // Wollman Rink
+                        [-73.9818, 40.7589], // Sheep Meadow
+                        [-73.9792, 40.7731], // Strawberry Fields
+                        [-73.9583, 40.8021]  // Back to start
                     ]
                 },
                 {
                     id: '2',
-                    name: 'Golden Gate Bridge Ride',
+                    name: 'Golden Gate Bridge Cycle',
                     type: 'cycling',
-                    distance: 25.2,
-                    time: 85,
+                    distance: 35.2,
+                    time: 125,
                     location: 'San Francisco, CA',
+                    date: '2024-08-28',
                     coordinates: [
-                        [-122.4194, 37.7749],
-                        [-122.4286, 37.8199],
-                        [-122.4786, 37.8199],
-                        [-122.4786, 37.8099],
-                        [-122.4194, 37.7749]
+                        [-122.4194, 37.7749], // Downtown SF
+                        [-122.4286, 37.7849], // Presidio approach
+                        [-122.4686, 37.8099], // Golden Gate Bridge south
+                        [-122.4786, 37.8199], // Golden Gate Bridge north
+                        [-122.4886, 37.8299], // Marin Headlands
+                        [-122.4986, 37.8199], // Vista Point
+                        [-122.4786, 37.8099], // Bridge return
+                        [-122.4286, 37.7849], // Back through Presidio
+                        [-122.4194, 37.7749]  // Back to downtown
                     ]
                 },
                 {
                     id: '3',
-                    name: 'Thames Path Run',
+                    name: 'Thames Path Marathon Training',
                     type: 'running',
-                    distance: 15.8,
-                    time: 72,
-                    location: 'London, UK',
+                    distance: 21.1,
+                    time: 105,
+                    location: 'London, UK', 
+                    date: '2024-09-03',
                     coordinates: [
-                        [-0.1276, 51.5074],
-                        [-0.1031, 51.5074],
-                        [-0.0761, 51.5155],
-                        [-0.0278, 51.5074],
-                        [-0.1276, 51.5074]
+                        [-0.1276, 51.5074], // Westminster Bridge
+                        [-0.1031, 51.5074], // London Eye
+                        [-0.0761, 51.5055], // Blackfriars Bridge
+                        [-0.0278, 51.5074], // Tower Bridge
+                        [-0.0178, 51.5074], // Butler's Wharf
+                        [0.0022, 51.4994],  // Greenwich
+                        [-0.0178, 51.5074], // Return Butler's Wharf
+                        [-0.0761, 51.5055], // Return Blackfriars
+                        [-0.1031, 51.5074], // Return London Eye
+                        [-0.1276, 51.5074]  // Return Westminster
+                    ]
+                },
+                {
+                    id: '4', 
+                    name: 'Pacific Coast Highway Ride',
+                    type: 'cycling',
+                    distance: 45.8,
+                    time: 180,
+                    location: 'Monterey, CA',
+                    date: '2024-08-25',
+                    coordinates: [
+                        [-121.8947, 36.6002], // Monterey
+                        [-121.9058, 36.5527], // 17-Mile Drive start
+                        [-121.9258, 36.5127], // Pebble Beach
+                        [-121.9458, 36.4727], // Lone Cypress
+                        [-121.9658, 36.4327], // Bird Rock
+                        [-121.9358, 36.3927], // Carmel
+                        [-121.9158, 36.4327], // Carmel Valley
+                        [-121.8958, 36.4727], // Point Lobos
+                        [-121.8947, 36.6002]  // Back to Monterey
+                    ]
+                },
+                {
+                    id: '5',
+                    name: 'Hyde Park Circuit Run',
+                    type: 'running', 
+                    distance: 8.2,
+                    time: 35,
+                    location: 'London, UK',
+                    date: '2024-09-04',
+                    coordinates: [
+                        [-0.1652, 51.5074], // Hyde Park Corner
+                        [-0.1552, 51.5174], // Speaker's Corner
+                        [-0.1752, 51.5174], // Lancaster Gate
+                        [-0.1852, 51.5074], // Kensington Gardens
+                        [-0.1752, 51.4974], // Albert Memorial
+                        [-0.1652, 51.4974], // South Carriage Drive
+                        [-0.1652, 51.5074]  // Back to start
                     ]
                 }
             ];
