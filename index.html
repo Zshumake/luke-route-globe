@@ -1065,46 +1065,71 @@
                 scene.fxaa = true; // Keep anti-aliasing
                 scene.fog.enabled = false; // Clear satellite view
                 
-                // Configure camera controls for detailed zoom with drift prevention
+                // Configure camera controls for detailed zoom with STRONG drift prevention
                 const controller = scene.screenSpaceCameraController;
                 controller.enableCollisionDetection = false; // Performance improvement
                 controller.minimumZoomDistance = 0.5; // Allow very close zoom
                 controller.maximumZoomDistance = 50000000.0;
                 
-                // Prevent camera drift and keep focus on Earth
-                controller.constrainedAxis = Cesium.Cartesian3.UNIT_Z; // Constrain to Earth's rotation axis
+                // AGGRESSIVE camera drift prevention
                 controller.enableTilt = true;
-                controller.enableLook = false; // Disable free look to prevent drift
+                controller.enableLook = false; // Disable free look completely
                 controller.enableTranslate = true;
                 controller.enableZoom = true;
                 controller.enableRotate = true;
                 
-                // Add camera movement constraints to prevent losing Earth
-                const originalUpdate = controller.update;
-                controller.update = function() {
-                    const result = originalUpdate.call(this);
-                    
-                    // Ensure camera always looks at Earth center when zoomed out
-                    const cameraPosition = viewer.camera.position;
-                    const cameraHeight = Cesium.Cartographic.fromCartesian(cameraPosition).height;
-                    
-                    // If camera is very far out (>20M km), constrain it to look at Earth center
-                    if (cameraHeight > 20000000) {
-                        const earthCenter = Cesium.Cartesian3.ZERO;
-                        const cameraDirection = Cesium.Cartesian3.subtract(earthCenter, cameraPosition, new Cesium.Cartesian3());
-                        Cesium.Cartesian3.normalize(cameraDirection, cameraDirection);
+                // Set up continuous camera monitoring to prevent drift
+                let lastValidCameraHeight = 15000000;
+                const earthRadius = 6371000; // Earth radius in meters
+                
+                setInterval(() => {
+                    try {
+                        const camera = viewer.camera;
+                        const cameraCartographic = camera.positionCartographic;
+                        const cameraHeight = cameraCartographic.height;
                         
-                        // Only adjust if camera is pointing away from Earth
-                        const currentDirection = viewer.camera.direction;
-                        const dot = Cesium.Cartesian3.dot(currentDirection, cameraDirection);
-                        
-                        if (dot < 0.5) { // Camera is pointing significantly away from Earth
-                            viewer.camera.lookAt(cameraPosition, earthCenter, Cesium.Cartesian3.UNIT_Z);
+                        // If camera height is reasonable, store it as last valid
+                        if (cameraHeight > 100 && cameraHeight < 100000000) {
+                            lastValidCameraHeight = cameraHeight;
                         }
+                        
+                        // Check if camera has drifted too far or is pointing away from Earth
+                        const cameraPosition = camera.position;
+                        const earthCenter = Cesium.Cartesian3.ZERO;
+                        const directionToEarth = Cesium.Cartesian3.subtract(earthCenter, cameraPosition, new Cesium.Cartesian3());
+                        const distanceToEarth = Cesium.Cartesian3.magnitude(directionToEarth);
+                        
+                        // Normalize direction to Earth
+                        Cesium.Cartesian3.normalize(directionToEarth, directionToEarth);
+                        
+                        // Check if camera is pointing away from Earth (dot product < 0 means opposite directions)
+                        const cameraDirection = camera.direction;
+                        const dotProduct = Cesium.Cartesian3.dot(cameraDirection, directionToEarth);
+                        
+                        // If camera is too far, pointing away, or height is invalid, reset it
+                        if (distanceToEarth > earthRadius + 100000000 || dotProduct < -0.1 || cameraHeight < 0 || cameraHeight > 200000000) {
+                            console.log('⚠️ CAMERA DRIFT DETECTED - Resetting to safe position');
+                            console.log(`⚠️ - Distance to Earth: ${(distanceToEarth/1000).toFixed(0)}km`);
+                            console.log(`⚠️ - Dot product: ${dotProduct.toFixed(3)}`);
+                            console.log(`⚠️ - Camera height: ${(cameraHeight/1000).toFixed(0)}km`);
+                            
+                            // Reset to a safe viewing position
+                            camera.setView({
+                                destination: Cesium.Cartesian3.fromDegrees(0, 30, Math.max(lastValidCameraHeight, 5000000)),
+                                orientation: {
+                                    heading: 0.0,
+                                    pitch: -Cesium.Math.PI_OVER_TWO * 0.5,
+                                    roll: 0.0
+                                }
+                            });
+                            
+                            viewer.scene.requestRender();
+                        }
+                        
+                    } catch (error) {
+                        console.warn('⚠️ Camera monitoring error:', error);
                     }
-                    
-                    return result;
-                };
+                }, 100); // Check every 100ms
                 
                 // High-resolution rendering with performance balance
                 viewer.resolutionScale = 1.0;
@@ -1448,38 +1473,84 @@
         
         // Display all routes permanently on the globe
         function displayAllRoutes() {
-            console.log(`🗺️ Displaying ${sampleRoutes.length} routes permanently on globe`);
+            console.log(`🗺️ ATTEMPTING to display ${sampleRoutes.length} routes permanently on globe`);
+            console.log(`🗺️ Sample routes data:`, sampleRoutes.slice(0, 3)); // Log first 3 routes
+            
+            if (!viewer || !viewer.entities) {
+                console.error('❌ Viewer or entities not available for route display');
+                return;
+            }
             
             // Clear existing permanent routes
             clearAllPermanentRoutes();
             
+            let routesAdded = 0;
+            let routesSkipped = 0;
+            
             sampleRoutes.forEach((route, index) => {
+                console.log(`🔍 Route ${index}: ${route.name}`);
+                console.log(`🔍 - Type: ${route.type}`);
+                console.log(`🔍 - Has coordinates: ${!!(route.coordinates)}`);
+                console.log(`🔍 - Coordinates length: ${route.coordinates ? route.coordinates.length : 0}`);
+                
                 if (route.coordinates && route.coordinates.length > 0) {
-                    const positions = route.coordinates.map(coord => 
-                        Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 2) // Slight elevation
-                    );
-                    
-                    // Create subtle route polylines
-                    const routeEntity = viewer.entities.add({
-                        polyline: {
-                            positions: positions,
-                            width: 3,
-                            material: route.type === 'cycling' ? 
-                                Cesium.Color.BLUE.withAlpha(0.6) : 
-                                Cesium.Color.RED.withAlpha(0.6),
-                            clampToGround: true,
-                            show: true
-                        },
-                        name: `Permanent-${route.name}`,
-                        description: `${route.type} - ${route.distance}km - ${route.date}`,
-                        route: route // Store route data for filtering
-                    });
-                    
-                    // Mark as permanent and add to collection
-                    routeEntity.isPermanent = true;
-                    permanentRouteEntities.push(routeEntity);
+                    try {
+                        const positions = route.coordinates.map(coord => {
+                            if (!coord || coord.length < 2) {
+                                console.warn(`⚠️ Invalid coordinate:`, coord);
+                                return null;
+                            }
+                            return Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 10); // Higher elevation for visibility
+                        }).filter(pos => pos !== null);
+                        
+                        if (positions.length < 2) {
+                            console.warn(`⚠️ Route ${route.name} has insufficient valid positions: ${positions.length}`);
+                            routesSkipped++;
+                            return;
+                        }
+                        
+                        console.log(`✅ Creating route entity for ${route.name} with ${positions.length} positions`);
+                        
+                        // Create MORE VISIBLE route polylines
+                        const routeEntity = viewer.entities.add({
+                            polyline: {
+                                positions: positions,
+                                width: 4, // Increased width
+                                material: route.type === 'cycling' ? 
+                                    Cesium.Color.BLUE.withAlpha(0.8) : // More opaque
+                                    Cesium.Color.RED.withAlpha(0.8),
+                                clampToGround: true,
+                                show: true,
+                                outline: true,
+                                outlineColor: Cesium.Color.WHITE.withAlpha(0.3)
+                            },
+                            name: `Permanent-${route.name}`,
+                            description: `${route.type} - ${route.distance}km - ${route.date}`,
+                            route: route // Store route data for filtering
+                        });
+                        
+                        // Mark as permanent and add to collection
+                        routeEntity.isPermanent = true;
+                        permanentRouteEntities.push(routeEntity);
+                        routesAdded++;
+                        
+                        console.log(`✅ Route entity created for ${route.name}`);
+                        
+                    } catch (error) {
+                        console.error(`❌ Error creating route ${route.name}:`, error);
+                        routesSkipped++;
+                    }
+                } else {
+                    console.log(`⚠️ Skipping route ${route.name} - no coordinates`);
+                    routesSkipped++;
                 }
             });
+            
+            console.log(`📊 ROUTE DISPLAY SUMMARY:`);
+            console.log(`📊 - Routes processed: ${sampleRoutes.length}`);
+            console.log(`📊 - Routes added: ${routesAdded}`);
+            console.log(`📊 - Routes skipped: ${routesSkipped}`);
+            console.log(`📊 - Total entities in viewer: ${viewer.entities.values.length}`);
             
             showAllRoutes = true;
             updatePermanentRouteVisibility();
