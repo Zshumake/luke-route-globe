@@ -277,6 +277,9 @@
                     <button id="clearWorldDistanceBtn" class="filter-btn" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); font-size: 11px; margin-top: 8px; width: 100%;">
                         Clear Visualization
                     </button>
+                    <button id="restoreEarthBtn" class="filter-btn" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); font-size: 11px; margin-top: 4px; width: 100%;">
+                        🌍 Emergency Restore Earth
+                    </button>
                 </div>
                 
                 <div class="stats">
@@ -338,6 +341,7 @@
         let showAllRoutes = false; // Toggle for showing all routes
         let worldDistanceEntities = []; // For around-the-world distance visualization
         let worldDistanceAnimation = null; // Animation handle
+        let savedCameraPosition = null; // Save camera position before visualization
         
         // Strava API Configuration
         const STRAVA_CONFIG = {
@@ -1925,91 +1929,53 @@
                 
                 console.log(`🌎 Animation params: ${degreesPerFrame} degrees per frame`);
                 
-                // Create SIMPLE animated polyline - no multiple laps for now
-                worldDistanceAnimation = setInterval(() => {
-                    try {
-                        currentDegrees += degreesPerFrame;
-                        
-                        // Simple single-lap visualization
-                        const currentEndLongitude = Math.min(EQUATOR_START_LONGITUDE + currentDegrees, EQUATOR_START_LONGITUDE + totalDegrees);
-                        
-                        // Create positions for current progress
-                        const positions = [];
-                        for (let lng = EQUATOR_START_LONGITUDE; lng <= currentEndLongitude; lng += 5) {
-                            const adjustedLng = ((lng + 180) % 360) - 180; // Wrap longitude
-                            positions.push(Cesium.Cartesian3.fromDegrees(adjustedLng, 0, 100000)); // Fixed height
-                        }
-                        
-                        if (positions.length > 1) {
-                            // Remove existing line
-                            const existingLine = worldDistanceEntities.find(e => e.name === 'distance-line');
-                            if (existingLine) {
-                                viewer.entities.remove(existingLine);
-                                const index = worldDistanceEntities.indexOf(existingLine);
-                                if (index > -1) worldDistanceEntities.splice(index, 1);
-                            }
-                            
-                            // Create new line
-                            const lineEntity = viewer.entities.add({
-                                name: 'distance-line',
-                                polyline: {
-                                    positions: positions,
-                                    width: 6,
-                                    material: color,
-                                    clampToGround: false,
-                                    show: true
-                                }
-                            });
-                            worldDistanceEntities.push(lineEntity);
-                        }
-                        
-                        // Update info text with progress
-                        const currentKm = Math.min((currentDegrees / 360) * EARTH_CIRCUMFERENCE_KM, distanceKm);
-                        const progressPercent = (currentKm / distanceKm) * 100;
-                        
-                        if (infoEntity && infoEntity.label) {
-                            infoEntity.label.text = `${activityType.toUpperCase()}\n${currentKm.toFixed(0)} / ${distanceKm.toFixed(0)} km\n${(currentKm / EARTH_CIRCUMFERENCE_KM).toFixed(2)}x around world\n${progressPercent.toFixed(0)}% complete`;
-                        }
-                        
-                        // Request render
-                        if (viewer.scene && viewer.scene.requestRender) {
-                            viewer.scene.requestRender();
-                        }
-                        
-                        // Stop animation when complete
-                        if (currentDegrees >= totalDegrees) {
-                            clearInterval(worldDistanceAnimation);
-                            worldDistanceAnimation = null;
-                            
-                            // Final update to info text
-                            if (infoEntity && infoEntity.label) {
-                                infoEntity.label.text = `${activityType.toUpperCase()} COMPLETE!\n${distanceKm.toFixed(1)} km total\n${timesAroundWorld.toFixed(2)}x around world`;
-                            }
-                            
-                            console.log(`✅ Animation complete for ${activityType}`);
-                        }
-                        
-                    } catch (animationError) {
-                        console.error('❌ Animation error:', animationError);
-                        clearInterval(worldDistanceAnimation);
-                        worldDistanceAnimation = null;
-                    }
-                }, 100); // Slower 100ms intervals for stability
+                // ULTRA SAFE - Just show static line without animation for now
+                console.log('🌎 Creating STATIC visualization to avoid crashes...');
                 
-                // Position camera to see the visualization - with safety check
                 try {
-                    viewer.camera.setView({
-                        destination: Cesium.Cartesian3.fromDegrees(-50, 20, 15000000),
-                        orientation: {
-                            heading: 0.0,
-                            pitch: -0.5,
-                            roll: 0.0
-                        }
-                    });
-                    console.log('✅ Camera positioned successfully');
-                } catch (cameraError) {
-                    console.error('❌ Camera positioning error:', cameraError);
+                    // Create static equator line showing full distance
+                    const endLongitude = EQUATOR_START_LONGITUDE + totalDegrees;
+                    const positions = [];
+                    
+                    // Simple line from start to end
+                    for (let lng = EQUATOR_START_LONGITUDE; lng <= endLongitude && lng <= EQUATOR_START_LONGITUDE + 360; lng += 10) {
+                        const adjustedLng = ((lng + 180) % 360) - 180; // Wrap longitude
+                        positions.push(Cesium.Cartesian3.fromDegrees(adjustedLng, 0, 200000));
+                    }
+                    
+                    if (positions.length > 1) {
+                        const lineEntity = viewer.entities.add({
+                            name: 'distance-line',
+                            polyline: {
+                                positions: positions,
+                                width: 8,
+                                material: color.withAlpha(0.8),
+                                clampToGround: false,
+                                show: true
+                            }
+                        });
+                        worldDistanceEntities.push(lineEntity);
+                        console.log('✅ Static distance line created');
+                    }
+                    
+                    // Update info text to final state immediately
+                    if (infoEntity && infoEntity.label) {
+                        infoEntity.label.text = `${activityType.toUpperCase()}\n${distanceKm.toFixed(1)} km total\n${timesAroundWorld.toFixed(2)}x around world\nSTATIC DISPLAY`;
+                    }
+                    
+                    // Request render once
+                    if (viewer.scene && viewer.scene.requestRender) {
+                        viewer.scene.requestRender();
+                    }
+                    
+                    console.log(`✅ Static visualization complete for ${activityType}`);
+                    
+                } catch (staticError) {
+                    console.error('❌ Static visualization error:', staticError);
                 }
+                
+                // DO NOT move camera - this was causing Earth to disappear
+                console.log('✅ Animation started - keeping current camera position');
                 
             } catch (error) {
                 console.error('❌ CRITICAL ERROR in animateDistanceAroundWorld:', error);
@@ -2071,6 +2037,40 @@
             } catch (error) {
                 console.error('❌ Error in showTotalAroundWorld:', error);
                 alert('Error displaying total distance. Check console for details.');
+            }
+        }
+        
+        // EMERGENCY RESTORE FUNCTION
+        function restoreEarth() {
+            try {
+                console.log('🌍 EMERGENCY RESTORE: Attempting to restore Earth...');
+                
+                // Clear any problematic animations/entities
+                clearWorldDistanceVisualization();
+                
+                // Reset camera to safe position
+                viewer.camera.setView({
+                    destination: Cesium.Cartesian3.fromDegrees(-98.5795, 39.8283, 15000000.0),
+                    orientation: {
+                        heading: 0.0,
+                        pitch: -1.2,
+                        roll: 0.0
+                    }
+                });
+                
+                // Force scene update
+                viewer.scene.globe.show = true;
+                viewer.scene.skyBox.show = true;
+                viewer.scene.sun.show = true;
+                viewer.scene.moon.show = true;
+                viewer.scene.requestRender();
+                
+                console.log('✅ Earth restore attempted');
+                
+            } catch (error) {
+                console.error('❌ Error in restoreEarth:', error);
+                // Last resort - try to reload the page
+                alert('Earth restoration failed. The page may need to be refreshed.');
             }
         }
         
@@ -2157,6 +2157,11 @@
             const clearWorldDistanceBtn = document.getElementById('clearWorldDistanceBtn');
             if (clearWorldDistanceBtn) {
                 clearWorldDistanceBtn.addEventListener('click', clearWorldDistanceVisualization);
+            }
+            
+            const restoreEarthBtn = document.getElementById('restoreEarthBtn');
+            if (restoreEarthBtn) {
+                restoreEarthBtn.addEventListener('click', restoreEarth);
             }
         }
 
