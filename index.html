@@ -255,6 +255,12 @@
                     <button class="filter-btn" data-filter="running">🏃‍♂️ Running</button>
                 </div>
                 
+                <div class="toggle-routes" style="margin: 10px 0; text-align: center;">
+                    <button id="toggleRoutesBtn" class="filter-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); width: 100%;">
+                        🌍 Show All Routes on Globe
+                    </button>
+                </div>
+                
                 <div class="stats">
                     <div class="stat-item">
                         <div class="stat-value" id="totalRoutes">0</div>
@@ -306,10 +312,12 @@
         // Global variables
         let viewer;
         let routeEntities = [];
+        let permanentRouteEntities = []; // For always-visible routes
         let currentFilter = 'all';
         let sampleRoutes = [];
         let clusterMarkers = [];
         let currentZoomLevel = 0;
+        let showAllRoutes = false; // Toggle for showing all routes
         
         // Strava API Configuration
         const STRAVA_CONFIG = {
@@ -1057,11 +1065,46 @@
                 scene.fxaa = true; // Keep anti-aliasing
                 scene.fog.enabled = false; // Clear satellite view
                 
-                // Configure camera controls for detailed zoom
+                // Configure camera controls for detailed zoom with drift prevention
                 const controller = scene.screenSpaceCameraController;
                 controller.enableCollisionDetection = false; // Performance improvement
                 controller.minimumZoomDistance = 0.5; // Allow very close zoom
                 controller.maximumZoomDistance = 50000000.0;
+                
+                // Prevent camera drift and keep focus on Earth
+                controller.constrainedAxis = Cesium.Cartesian3.UNIT_Z; // Constrain to Earth's rotation axis
+                controller.enableTilt = true;
+                controller.enableLook = false; // Disable free look to prevent drift
+                controller.enableTranslate = true;
+                controller.enableZoom = true;
+                controller.enableRotate = true;
+                
+                // Add camera movement constraints to prevent losing Earth
+                const originalUpdate = controller.update;
+                controller.update = function() {
+                    const result = originalUpdate.call(this);
+                    
+                    // Ensure camera always looks at Earth center when zoomed out
+                    const cameraPosition = viewer.camera.position;
+                    const cameraHeight = Cesium.Cartographic.fromCartesian(cameraPosition).height;
+                    
+                    // If camera is very far out (>20M km), constrain it to look at Earth center
+                    if (cameraHeight > 20000000) {
+                        const earthCenter = Cesium.Cartesian3.ZERO;
+                        const cameraDirection = Cesium.Cartesian3.subtract(earthCenter, cameraPosition, new Cesium.Cartesian3());
+                        Cesium.Cartesian3.normalize(cameraDirection, cameraDirection);
+                        
+                        // Only adjust if camera is pointing away from Earth
+                        const currentDirection = viewer.camera.direction;
+                        const dot = Cesium.Cartesian3.dot(currentDirection, cameraDirection);
+                        
+                        if (dot < 0.5) { // Camera is pointing significantly away from Earth
+                            viewer.camera.lookAt(cameraPosition, earthCenter, Cesium.Cartesian3.UNIT_Z);
+                        }
+                    }
+                    
+                    return result;
+                };
                 
                 // High-resolution rendering with performance balance
                 viewer.resolutionScale = 1.0;
@@ -1281,14 +1324,24 @@
             
             populateRoutesList();
             
-            // Create initial cluster markers
+            // Create initial cluster markers and display all routes
             setTimeout(() => {
                 createClusterMarkers();
                 setupCameraListeners();
+                
+                // Automatically show all routes on globe for browsing
+                displayAllRoutes();
+                
+                // Update toggle button to reflect that routes are shown
+                const toggleBtn = document.getElementById('toggleRoutesBtn');
+                if (toggleBtn) {
+                    toggleBtn.textContent = '🌍 Hide Routes from Globe';
+                    toggleBtn.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+                }
             }, 1000);
         }
         
-        // Setup camera change listeners for clustering
+        // Setup camera change listeners for clustering and click handlers
         function setupCameraListeners() {
             viewer.camera.changed.addEventListener(() => {
                 // Throttle cluster updates
@@ -1297,6 +1350,177 @@
                     createClusterMarkers();
                 }, 500);
             });
+            
+            // Add click handler for cluster markers
+            const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+            handler.setInputAction((event) => {
+                const pickedFeature = viewer.scene.pick(event.position);
+                
+                if (pickedFeature && pickedFeature.id && pickedFeature.id.cluster) {
+                    const cluster = pickedFeature.id.cluster;
+                    console.log(`🎯 Clicked cluster with ${cluster.routes.length} routes`);
+                    
+                    // Calculate bounding box for all routes in the cluster
+                    const allPositions = [];
+                    cluster.routes.forEach(route => {
+                        if (route.coordinates && route.coordinates.length > 0) {
+                            route.coordinates.forEach(coord => {
+                                if (coord.length >= 2) {
+                                    allPositions.push(Cesium.Cartesian3.fromDegrees(coord[0], coord[1]));
+                                }
+                            });
+                        }
+                    });
+                    
+                    if (allPositions.length > 0) {
+                        // Create bounding sphere for all routes in cluster
+                        const boundingSphere = Cesium.BoundingSphere.fromPoints(allPositions);
+                        const distance = Math.max(boundingSphere.radius * 3, 10000); // More conservative distance
+                        
+                        // Fly to show all routes in the cluster
+                        viewer.camera.flyToBoundingSphere(boundingSphere, {
+                            duration: 2.5,
+                            offset: new Cesium.HeadingPitchRange(0, -0.5, distance),
+                            complete: () => {
+                                viewer.scene.requestRender();
+                                console.log(`✅ Flew to cluster region with ${cluster.routes.length} routes`);
+                                
+                                // Show routes in this cluster temporarily
+                                showClusterRoutes(cluster);
+                            }
+                        });
+                    }
+                }
+            }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        }
+        
+        // Temporarily show routes in a cluster
+        function showClusterRoutes(cluster) {
+            // Remove any existing temporary route displays
+            clearTemporaryRoutes();
+            
+            console.log(`🗺️ Showing ${cluster.routes.length} routes in cluster temporarily`);
+            
+            cluster.routes.forEach(route => {
+                if (route.coordinates && route.coordinates.length > 0) {
+                    const positions = route.coordinates.map(coord => 
+                        Cesium.Cartesian3.fromDegrees(coord[0], coord[1])
+                    );
+                    
+                    const routeEntity = viewer.entities.add({
+                        polyline: {
+                            positions: positions,
+                            width: 4,
+                            material: route.type === 'cycling' ? 
+                                Cesium.Color.CYAN.withAlpha(0.8) : 
+                                Cesium.Color.ORANGE.withAlpha(0.8),
+                            clampToGround: true
+                        },
+                        name: `Temp-${route.name}`,
+                        description: `${route.type} - ${route.distance}km`
+                    });
+                    
+                    // Mark as temporary for cleanup
+                    routeEntity.isTemporary = true;
+                }
+            });
+            
+            // Clear temporary routes after 8 seconds
+            setTimeout(() => {
+                clearTemporaryRoutes();
+            }, 8000);
+            
+            viewer.scene.requestRender();
+        }
+        
+        // Clear temporary route displays
+        function clearTemporaryRoutes() {
+            const entitiesToRemove = [];
+            viewer.entities.values.forEach(entity => {
+                if (entity.isTemporary) {
+                    entitiesToRemove.push(entity);
+                }
+            });
+            
+            entitiesToRemove.forEach(entity => viewer.entities.remove(entity));
+            viewer.scene.requestRender();
+        }
+        
+        // Display all routes permanently on the globe
+        function displayAllRoutes() {
+            console.log(`🗺️ Displaying ${sampleRoutes.length} routes permanently on globe`);
+            
+            // Clear existing permanent routes
+            clearAllPermanentRoutes();
+            
+            sampleRoutes.forEach((route, index) => {
+                if (route.coordinates && route.coordinates.length > 0) {
+                    const positions = route.coordinates.map(coord => 
+                        Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 2) // Slight elevation
+                    );
+                    
+                    // Create subtle route polylines
+                    const routeEntity = viewer.entities.add({
+                        polyline: {
+                            positions: positions,
+                            width: 3,
+                            material: route.type === 'cycling' ? 
+                                Cesium.Color.BLUE.withAlpha(0.6) : 
+                                Cesium.Color.RED.withAlpha(0.6),
+                            clampToGround: true,
+                            show: true
+                        },
+                        name: `Permanent-${route.name}`,
+                        description: `${route.type} - ${route.distance}km - ${route.date}`,
+                        route: route // Store route data for filtering
+                    });
+                    
+                    // Mark as permanent and add to collection
+                    routeEntity.isPermanent = true;
+                    permanentRouteEntities.push(routeEntity);
+                }
+            });
+            
+            showAllRoutes = true;
+            updatePermanentRouteVisibility();
+            viewer.scene.requestRender();
+            
+            console.log(`✅ Added ${permanentRouteEntities.length} permanent routes to globe`);
+        }
+        
+        // Clear all permanent routes
+        function clearAllPermanentRoutes() {
+            permanentRouteEntities.forEach(entity => {
+                viewer.entities.remove(entity);
+            });
+            permanentRouteEntities = [];
+            showAllRoutes = false;
+            viewer.scene.requestRender();
+        }
+        
+        // Update visibility of permanent routes based on current filter
+        function updatePermanentRouteVisibility() {
+            if (!showAllRoutes) return;
+            
+            permanentRouteEntities.forEach(entity => {
+                if (entity.route) {
+                    const shouldShow = currentFilter === 'all' || entity.route.type === currentFilter;
+                    entity.polyline.show = shouldShow;
+                }
+            });
+            
+            viewer.scene.requestRender();
+        }
+        
+        // Toggle all routes display
+        function toggleAllRoutesDisplay() {
+            if (showAllRoutes) {
+                clearAllPermanentRoutes();
+                console.log('🌍 Routes hidden');
+            } else {
+                displayAllRoutes();
+                console.log('🌍 Routes displayed');
+            }
         }
 
         // Populate the routes list
@@ -1423,16 +1647,16 @@
                 
                 // Calculate bounding rectangle for better camera positioning
                 const boundingSphere = Cesium.BoundingSphere.fromPoints(positions);
-                const distance = Math.max(boundingSphere.radius * 3, 1000); // Minimum distance of 1km
+                const distance = Math.max(boundingSphere.radius * 4, 2000); // More conservative minimum distance
                 
-                // Fly to route with optimized camera positioning
+                // Fly to route with optimized camera positioning to show whole route
                 viewer.camera.flyToBoundingSphere(boundingSphere, {
                     duration: 2.0,
-                    offset: new Cesium.HeadingPitchRange(0, -1.0, distance),
+                    offset: new Cesium.HeadingPitchRange(0, -0.7, distance), // Less steep angle
                     complete: () => {
                         // Request render after camera movement completes
                         viewer.scene.requestRender();
-                        console.log(`Flew to route: ${route.name}`);
+                        console.log(`Flew to route: ${route.name} with distance ${distance}m`);
                     }
                 });
                 
@@ -1490,6 +1714,7 @@
                     // Refresh UI
                     populateRoutesList();
                     updateStats();
+                    updatePermanentRouteVisibility(); // Update permanent route visibility
                     
                     // Clear active route
                     routeEntities.forEach(entity => viewer.entities.remove(entity));
@@ -1520,6 +1745,23 @@
                     viewer.scene.requestRender();
                 }
             });
+            
+            // Toggle routes button event listener
+            const toggleRoutesBtn = document.getElementById('toggleRoutesBtn');
+            if (toggleRoutesBtn) {
+                toggleRoutesBtn.addEventListener('click', () => {
+                    toggleAllRoutesDisplay();
+                    
+                    // Update button text and style
+                    if (showAllRoutes) {
+                        toggleRoutesBtn.textContent = '🌍 Hide Routes from Globe';
+                        toggleRoutesBtn.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+                    } else {
+                        toggleRoutesBtn.textContent = '🌍 Show All Routes on Globe';
+                        toggleRoutesBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+                    }
+                });
+            }
         }
 
         // Duplicate StravaAPI class removed - using the full implementation above
