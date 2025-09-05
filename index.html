@@ -262,7 +262,15 @@
                     </div>
                     <div class="stat-item">
                         <div class="stat-value" id="totalDistance">0 km</div>
-                        <div class="stat-label">Distance</div>
+                        <div class="stat-label">Total Distance</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="cyclingDistance">0 km</div>
+                        <div class="stat-label">😴️ Cycling</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="runningDistance">0 km</div>
+                        <div class="stat-label">🏃‍♂️ Running</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-value" id="totalTime">0h</div>
@@ -300,6 +308,8 @@
         let routeEntities = [];
         let currentFilter = 'all';
         let sampleRoutes = [];
+        let clusterMarkers = [];
+        let currentZoomLevel = 0;
         
         // Strava API Configuration
         const STRAVA_CONFIG = {
@@ -513,7 +523,29 @@
             return {
                 id: activity.id.toString(),
                 name: activity.name,
-                type: activity.sport_type === 'Ride' ? 'cycling' : 'running',
+                type: (() => {
+                    // Map Strava sport types to our categories
+                    const sportType = activity.sport_type || activity.type || 'Unknown';
+                    console.log(`🔍 RAW SPORT TYPE: "${sportType}" for activity: ${activity.name}`);
+                    
+                    // Cycling activities
+                    if (sportType === 'Ride' || sportType === 'VirtualRide' || sportType === 'EBikeRide') {
+                        return 'cycling';
+                    }
+                    // Running activities  
+                    else if (sportType === 'Run' || sportType === 'VirtualRun' || sportType === 'TrailRun') {
+                        return 'running';
+                    }
+                    // Walking/Hiking activities
+                    else if (sportType === 'Walk' || sportType === 'Hike') {
+                        return 'running'; // Group with running for now
+                    }
+                    // Default to running for unknown activities
+                    else {
+                        console.warn(`⚠️ UNKNOWN SPORT TYPE: "${sportType}" - defaulting to running`);
+                        return 'running';
+                    }
+                })(),
                 distance: Math.round((activity.distance / 1000) * 10) / 10, // Convert meters to km
                 time: Math.round(activity.moving_time / 60), // Convert seconds to minutes
                 location: `${activity.start_city || 'Unknown'}, ${activity.start_state || activity.start_country || ''}`.replace(', ,', ','),
@@ -1113,6 +1145,127 @@
             }
         }
         
+        // Geographic clustering functions for Airbnb-style markers
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            // Haversine formula for distance between two points
+            const R = 6371; // Earth's radius in kilometers
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                    Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+        
+        function clusterRoutes(routes, maxDistance = 50) {
+            // Group routes by geographic proximity (like Airbnb)
+            const clusters = [];
+            const processed = new Set();
+            
+            routes.forEach((route, index) => {
+                if (processed.has(index) || !route.coordinates || route.coordinates.length === 0) return;
+                
+                const cluster = {
+                    routes: [route],
+                    centerLat: route.coordinates[0][1], // lat from first coordinate
+                    centerLng: route.coordinates[0][0], // lng from first coordinate
+                    city: route.location
+                };
+                
+                // Find nearby routes to cluster
+                routes.forEach((otherRoute, otherIndex) => {
+                    if (processed.has(otherIndex) || otherIndex === index || 
+                        !otherRoute.coordinates || otherRoute.coordinates.length === 0) return;
+                        
+                    const distance = calculateDistance(
+                        cluster.centerLat, cluster.centerLng,
+                        otherRoute.coordinates[0][1], otherRoute.coordinates[0][0]
+                    );
+                    
+                    if (distance <= maxDistance) {
+                        cluster.routes.push(otherRoute);
+                        processed.add(otherIndex);
+                    }
+                });
+                
+                processed.add(index);
+                clusters.push(cluster);
+            });
+            
+            return clusters;
+        }
+        
+        function createClusterMarkers() {
+            // Clear existing cluster markers
+            clusterMarkers.forEach(marker => viewer.entities.remove(marker));
+            clusterMarkers = [];
+            
+            // Get current camera height to determine clustering
+            const cameraHeight = viewer.camera.positionCartographic.height;
+            
+            // Only show clusters when zoomed out (above 1M meters)
+            if (cameraHeight < 1000000) {
+                return;
+            }
+            
+            const filteredRoutes = sampleRoutes.filter(route => {
+                return currentFilter === 'all' || route.type === currentFilter;
+            });
+            
+            const clusters = clusterRoutes(filteredRoutes, 100); // 100km clustering radius
+            
+            clusters.forEach(cluster => {
+                if (cluster.routes.length === 0) return;
+                
+                const clusterMarker = viewer.entities.add({
+                    name: `${cluster.routes.length} routes in ${cluster.city}`,
+                    position: Cesium.Cartesian3.fromDegrees(cluster.centerLng, cluster.centerLat, 1000),
+                    billboard: {
+                        image: createClusterIcon(cluster.routes.length),
+                        scale: 0.8,
+                        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                    },
+                    label: {
+                        text: cluster.routes.length.toString(),
+                        font: '14pt bold monospace',
+                        fillColor: Cesium.Color.WHITE,
+                        outlineColor: Cesium.Color.BLACK,
+                        outlineWidth: 2,
+                        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                        pixelOffset: new Cesium.Cartesian2(0, -20),
+                        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                    }
+                });
+                
+                // Store cluster data for click handling
+                clusterMarker.cluster = cluster;
+                clusterMarkers.push(clusterMarker);
+            });
+        }
+        
+        function createClusterIcon(count) {
+            // Create a canvas for the cluster marker icon
+            const canvas = document.createElement('canvas');
+            canvas.width = 40;
+            canvas.height = 40;
+            const ctx = canvas.getContext('2d');
+            
+            // Draw circle background (Airbnb style)
+            ctx.fillStyle = count > 10 ? '#ef4444' : count > 5 ? '#f97316' : '#3b82f6';
+            ctx.beginPath();
+            ctx.arc(20, 20, 18, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Add white border
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            return canvas;
+        }
+        
         // Initialize routes - try Strava first, fallback to samples
         async function initializeRoutes() {
             console.log('🔄 Initializing routes...');
@@ -1127,6 +1280,23 @@
             }
             
             populateRoutesList();
+            
+            // Create initial cluster markers
+            setTimeout(() => {
+                createClusterMarkers();
+                setupCameraListeners();
+            }, 1000);
+        }
+        
+        // Setup camera change listeners for clustering
+        function setupCameraListeners() {
+            viewer.camera.changed.addEventListener(() => {
+                // Throttle cluster updates
+                clearTimeout(window.clusterUpdateTimeout);
+                window.clusterUpdateTimeout = setTimeout(() => {
+                    createClusterMarkers();
+                }, 500);
+            });
         }
 
         // Populate the routes list
@@ -1277,14 +1447,32 @@
                 return currentFilter === 'all' || route.type === currentFilter;
             });
             
+            // Calculate separate stats for cycling and running from ALL routes (not filtered)
+            const allCyclingRoutes = sampleRoutes.filter(route => route.type === 'cycling');
+            const allRunningRoutes = sampleRoutes.filter(route => route.type === 'running');
+            
+            const cyclingDistance = allCyclingRoutes.reduce((sum, route) => sum + route.distance, 0);
+            const runningDistance = allRunningRoutes.reduce((sum, route) => sum + route.distance, 0);
+            
+            // Calculate filtered stats for current view
             const totalDistance = filteredRoutes.reduce((sum, route) => sum + route.distance, 0);
             const totalTime = filteredRoutes.reduce((sum, route) => sum + route.time, 0);
             const uniqueLocations = [...new Set(filteredRoutes.map(route => route.location.split(',')[1]?.trim()))];
             
+            // Update UI with stats
             document.getElementById('totalRoutes').textContent = filteredRoutes.length;
             document.getElementById('totalDistance').textContent = `${totalDistance.toFixed(1)} km`;
+            document.getElementById('cyclingDistance').textContent = `${cyclingDistance.toFixed(1)} km`;
+            document.getElementById('runningDistance').textContent = `${runningDistance.toFixed(1)} km`;
             document.getElementById('totalTime').textContent = `${Math.floor(totalTime/60)}h`;
             document.getElementById('countries').textContent = uniqueLocations.filter(Boolean).length;
+            
+            // Debug output to see what we're calculating
+            console.log(`📊 STATS UPDATE:`);
+            console.log(`📊 - Total routes: ${sampleRoutes.length}`);
+            console.log(`📊 - Cycling routes: ${allCyclingRoutes.length} (${cyclingDistance.toFixed(1)} km)`);
+            console.log(`📊 - Running routes: ${allRunningRoutes.length} (${runningDistance.toFixed(1)} km)`);
+            console.log(`📊 - Filtered routes: ${filteredRoutes.length} (${totalDistance.toFixed(1)} km)`);
         }
 
         // Setup event listeners
