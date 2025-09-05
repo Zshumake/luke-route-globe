@@ -373,18 +373,15 @@
                 console.log('🔍 Debug: Starting imagery provider selection...');
                 
                 try {
-                    // STRATEGY 1: Direct Bing Maps API (most reliable for your use case)
-                    console.log('🗺️ DEBUG: Starting Strategy 1 - Direct Bing Maps API...');
-                    console.log('🔍 Debug: Bing Maps URL: https://dev.virtualearth.net');
-                    console.log('🔍 Debug: Bing Maps key length:', 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf'.length);
-                    console.log('🔍 Debug: Creating BingMapsImageryProvider with AERIAL style...');
+                    // STRATEGY 1: Ion Asset ID 3 (Bing Maps On Demand - High Resolution)
+                    console.log('🗺️ DEBUG: Starting Strategy 1 - Ion Asset ID 3 (Bing Maps)...');
+                    console.log('🔍 Debug: Using Ion token for high-res Bing Maps access...');
+                    console.log('🔍 Debug: Asset ID 3 = Bing Maps On Demand with street-level detail...');
                     
-                    imageryProvider = await Cesium.BingMapsImageryProvider.fromUrl('https://dev.virtualearth.net', {
-                        key: 'AqTGBsziZHIJYYxgivLBf0hVdrAk9mWO5cQcb8Yux8sW5M8c8opEC2lZqKR1ZZXf',
-                        mapStyle: Cesium.BingMapsStyle.AERIAL,
-                        maximumLevel: 20
+                    imageryProvider = await Cesium.IonImageryProvider.fromAssetId(3, {
+                        maximumLevel: 20  // Street-level zoom for high fidelity
                     });
-                    console.log('✅ DEBUG: Strategy 1 SUCCESS - Direct Bing Maps API loaded');
+                    console.log('✅ DEBUG: Strategy 1 SUCCESS - Ion Asset ID 3 loaded');
                     console.log('🔍 Debug: Provider type:', imageryProvider.constructor.name);
                     console.log('🔍 Debug: Provider ready:', imageryProvider.ready);
                     
@@ -394,14 +391,14 @@
                     console.error('🔍 Debug: Error stack:', cesiumBingError.stack);
                     
                     try {
-                        // STRATEGY 2: Cesium Ion default Bing Maps (without specific Asset ID)
-                        console.log('🗺️ Attempting Cesium Ion default Bing Maps (Strategy 2)...');
-                        // Use OpenStreetMap as reliable fallback instead of Ion
-                        imageryProvider = new Cesium.OpenStreetMapImageryProvider({
-                            url: 'https://tile.openstreetmap.org/',
-                            maximumLevel: 18
+                        // STRATEGY 2: Ion Asset ID 2 (Sentinel-2 Satellite - High Resolution)
+                        console.log('🗺️ DEBUG: Attempting Strategy 2 - Ion Asset ID 2 (Sentinel-2)...');
+                        console.log('🔍 Debug: Sentinel-2 provides 10m resolution satellite imagery...');
+                        
+                        imageryProvider = await Cesium.IonImageryProvider.fromAssetId(2, {
+                            maximumLevel: 18  // High-resolution satellite imagery
                         });
-                        console.log('✅ Strategy 2: OpenStreetMap fallback loaded successfully');
+                        console.log('✅ Strategy 2: Ion Asset ID 2 (Sentinel-2) loaded successfully');
                         
                     } catch (bingError) {
                         console.warn('⚠️ Strategy 2 failed:', bingError.message);
@@ -455,8 +452,11 @@
                     // Imagery
                     imageryProvider: imageryProvider,
                     
-                    // No terrain provider to avoid Ion calls completely
-                    terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+                    // High-resolution terrain using Ion World Terrain
+                    terrainProvider: await Cesium.createWorldTerrainAsync({
+                        requestWaterMask: true,
+                        requestVertexNormals: true
+                    }),
                     
                     // Rendering
                     requestRenderMode: false,
