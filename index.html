@@ -3123,17 +3123,15 @@
                 
                 overlay.style.display = 'block';
                 
-                // Calculate animation parameters
-                const earthCircumference = 40075; // km at equator (full Earth circumference)
-                const routeLatitude = 40.0; // US latitude for visual appeal
-                const latitudeCircumference = earthCircumference * Math.cos(routeLatitude * Math.PI / 180); // ~30,710 km
+                // Calculate animation parameters - simple equatorial path
+                const earthCircumference = 40075; // km at equator
+                const routeLatitude = 0.0; // Travel at equator for true world circumference
                 
-                // Use full Earth circumference for distance calculation, but travel at US latitude
+                // Calculate how many times around the world
                 const totalDegrees = (distanceKm / earthCircumference) * 360; // Can be > 360 for multiple laps
-                const lapsAroundLatitude = distanceKm / latitudeCircumference; // How many times around the US latitude
-                const timesAroundWorld = distanceKm / earthCircumference; // True times around equatorial Earth
+                const timesAroundWorld = distanceKm / earthCircumference; // True times around Earth
                 
-                console.log(`🌍 Distance calc: ${distanceKm}km = ${lapsAroundLatitude.toFixed(2)} laps at 40°N = ${timesAroundWorld.toFixed(2)}x equatorial Earth`);
+                console.log(`🌍 EQUATORIAL PATH: ${distanceKm}km = ${timesAroundWorld.toFixed(2)}x around Earth (${totalDegrees.toFixed(1)}°)`);
                 
                 // Setup animation variables
                 let currentDistance = 0;
@@ -3149,7 +3147,7 @@
                     (lukeHeadImg.src.includes('Luke') || lukeHeadImg.src.includes('.png'));
                 
                 // Create line and Luke's head  
-                const START_LONGITUDE = -120.0; // Start over US West Coast
+                const START_LONGITUDE = -120.0; // Start at equator
                 let progressiveLinePositions = [];
                 
                 // Initialize the progressive line (empty at start)
