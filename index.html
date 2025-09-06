@@ -1370,7 +1370,9 @@
                 // Auto-load Luke's face if enabled
                 if (AUTO_LOAD_LUKES_FACE) {
                     console.log('🤯 Auto-loading Luke\'s face...');
-                    loadLukesImageFromMethod(IMAGE_METHOD);
+                    const lukesImage = getLukesImage();
+                    console.log('📷 Using Luke\'s image:', lukesImage.substring(0, 50) + '...');
+                    setLukesHeadImage(lukesImage);
                 }
                 
                 console.log('✅ Luke Route Globe initialized successfully!');
@@ -1999,6 +2001,33 @@
                     console.log('✅ Animation stopped');
                 }
                 
+                // Clear progressive line reference
+                if (window.currentProgressiveLine) {
+                    try {
+                        if (viewer.entities.contains(window.currentProgressiveLine)) {
+                            viewer.entities.remove(window.currentProgressiveLine);
+                        }
+                        window.currentProgressiveLine = null;
+                    } catch (lineError) {
+                        console.warn('⚠️ Error clearing progressive line:', lineError);
+                    }
+                }
+                
+                // Clear popup boxes around Luke's face
+                if (window.lukePopupBoxes && window.lukePopupBoxes.length > 0) {
+                    window.lukePopupBoxes.forEach(popup => {
+                        try {
+                            if (popup.entity && viewer.entities.contains(popup.entity)) {
+                                viewer.entities.remove(popup.entity);
+                            }
+                        } catch (popupError) {
+                            console.warn('⚠️ Error clearing popup box:', popupError);
+                        }
+                    });
+                    window.lukePopupBoxes = [];
+                    window.lastPopupFrame = 0;
+                }
+                
                 // Remove all world distance entities safely
                 if (viewer && viewer.entities && worldDistanceEntities.length > 0) {
                     worldDistanceEntities.forEach((entity, index) => {
@@ -2059,24 +2088,37 @@
                 // Create COOL floating info bubble
                 let infoEntity;
                 try {
+                    // Create EPIC fun text with more personality!
+                    const funStartText = activityType === 'Cycling Distance' ? 
+                        `🚴‍♂️💨 LUKE'S EPIC CYCLING ADVENTURE! 💨🚴‍♂️\n\n🏆 ${distanceKm.toFixed(1)} km of PURE CYCLING POWER!\n🌍 That's ${timesAroundWorld.toFixed(2)}x around our ENTIRE PLANET!\n\n${timesAroundWorld >= 1 ? '🤯 ABSOLUTELY LEGENDARY STATUS! 🤯' : '🔥 BUILDING LEGEND STATUS! 🔥'}` :
+                        activityType === 'Running Distance' ? 
+                        `🏃‍♂️⚡ LUKE'S INCREDIBLE RUNNING JOURNEY! ⚡🏃‍♂️\n\n💪 ${distanceKm.toFixed(1)} km of UNSTOPPABLE RUNNING!\n🌍 That's ${timesAroundWorld.toFixed(2)}x around PLANET EARTH!\n\n${timesAroundWorld >= 1 ? '🚀 SUPERHUMAN ACHIEVEMENT! 🚀' : '⭐ SUPERHUMAN IN PROGRESS! ⭐'}` :
+                        `🎯🌟 LUKE'S TOTAL ATHLETIC DOMINATION! 🌟🎯\n\n🏅 ${distanceKm.toFixed(1)} km of COMBINED EPIC-NESS!\n🌍 That's ${timesAroundWorld.toFixed(2)}x around the WHOLE WORLD!\n\n${timesAroundWorld >= 1 ? '👑 ABSOLUTE WORLD CHAMPION! 👑' : '🎲 WORLD CHAMPION LOADING... 🎲'}`;
+
                     infoEntity = viewer.entities.add({
-                        position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE - 30, 30, 3000000), // Offset to side
+                        position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE - 40, 35, 4000000), // Higher and more to the side
                         label: {
-                            text: `🎆 ${activityType.toUpperCase()} DISTANCE 🎆\n\n📍 ${distanceKm.toFixed(1)} km total\n🌍 ${timesAroundWorld.toFixed(2)}x around world\n\n${timesAroundWorld >= 1 ? '🎉 AMAZING!' : '💪 KEEP GOING!'}`,
-                            font: 'bold 16pt Arial, sans-serif',
+                            text: funStartText,
+                            font: 'bold 18pt Impact, Arial Black, sans-serif', // More dramatic font
                             fillColor: Cesium.Color.WHITE,
-                            outlineColor: activityType === 'Cycling Distance' ? Cesium.Color.BLUE : 
-                                          activityType === 'Running Distance' ? Cesium.Color.RED : Cesium.Color.PURPLE,
-                            outlineWidth: 3,
+                            outlineColor: activityType === 'Cycling Distance' ? Cesium.Color.CYAN : 
+                                          activityType === 'Running Distance' ? Cesium.Color.ORANGE : Cesium.Color.MAGENTA,
+                            outlineWidth: 4, // Thicker outline for more drama
                             style: Cesium.LabelStyle.FILL_AND_OUTLINE,
                             verticalOrigin: Cesium.VerticalOrigin.CENTER,
                             horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
                             pixelOffset: new Cesium.Cartesian2(0, 0),
-                            backgroundColor: activityType === 'Cycling Distance' ? Cesium.Color.BLUE.withAlpha(0.8) : 
-                                             activityType === 'Running Distance' ? Cesium.Color.RED.withAlpha(0.8) : Cesium.Color.PURPLE.withAlpha(0.8),
-                            backgroundPadding: new Cesium.Cartesian2(20, 15),
+                            // EPIC gradient-style background with more pazazz!
+                            backgroundColor: activityType === 'Cycling Distance' ? 
+                                new Cesium.Color(0.0, 0.4, 1.0, 0.9) : // Bright blue
+                                activityType === 'Running Distance' ? 
+                                new Cesium.Color(1.0, 0.3, 0.0, 0.9) : // Bright orange-red  
+                                new Cesium.Color(0.8, 0.0, 1.0, 0.9),  // Bright purple
+                            backgroundPadding: new Cesium.Cartesian2(35, 25), // Much bigger padding so text fits!
                             showBackground: true,
-                            disableDepthTestDistance: Number.POSITIVE_INFINITY // Always visible
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                            // ADD SCALE for more impact!
+                            scale: 1.0
                         }
                     });
                     worldDistanceEntities.push(infoEntity);
@@ -2168,20 +2210,21 @@
                     });
                     worldDistanceEntities.push(lukeHeadEntity);
                     
-                    // Create mile counter bubble
+                    // Create EPIC mile counter with maximum pazazz!
                     const mileCounterEntity = viewer.entities.add({
-                        position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE - 40, 40, 4000000),
+                        position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE - 50, 45, 5000000), // Higher and more visible
                         label: {
-                            text: '🏁 MILES: 0 / ' + (distanceKm * 0.621371).toFixed(0) + '\n🏃‍♂️ GO LUKE GO!',
-                            font: 'bold 18pt Arial',
+                            text: '🚀 MILES CRUSHED: 0 / ' + (distanceKm * 0.621371).toFixed(0) + ' 🚀\n🔥 LUKE IS UNSTOPPABLE! 🔥',
+                            font: 'bold 20pt Impact, Arial Black, sans-serif', // Bigger and bolder
                             fillColor: Cesium.Color.WHITE,
-                            outlineColor: Cesium.Color.GREEN,
-                            outlineWidth: 3,
+                            outlineColor: Cesium.Color.LIME,
+                            outlineWidth: 4, // Thicker outline
                             style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                            backgroundColor: Cesium.Color.GREEN.withAlpha(0.8),
-                            backgroundPadding: new Cesium.Cartesian2(15, 10),
+                            backgroundColor: new Cesium.Color(0.0, 0.8, 0.0, 0.95), // Bright green
+                            backgroundPadding: new Cesium.Cartesian2(30, 20), // Much bigger padding
                             showBackground: true,
-                            disableDepthTestDistance: Number.POSITIVE_INFINITY
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                            scale: 1.1 // Make it bigger!
                         }
                     });
                     worldDistanceEntities.push(mileCounterEntity);
@@ -2203,16 +2246,10 @@
                             // Add new position to growing line
                             progressiveLinePositions.push(Cesium.Cartesian3.fromDegrees(wrappedEndLng, 0, 800000));
                             
-                            // Remove old line and create new growing line
-                            const existingLine = worldDistanceEntities.find(e => e.name === 'progressive-line');
-                            if (existingLine) {
-                                viewer.entities.remove(existingLine);
-                                const index = worldDistanceEntities.indexOf(existingLine);
-                                if (index > -1) worldDistanceEntities.splice(index, 1);
-                            }
-                            
-                            if (progressiveLinePositions.length > 1) {
-                                const progressiveLine = viewer.entities.add({
+                            // Update existing line positions instead of removing/re-adding (fixes flashing)
+                            if (!window.currentProgressiveLine && progressiveLinePositions.length > 1) {
+                                // Create line entity only once
+                                window.currentProgressiveLine = viewer.entities.add({
                                     name: 'progressive-line',
                                     polyline: {
                                         positions: progressiveLinePositions,
@@ -2222,39 +2259,114 @@
                                         show: true
                                     }
                                 });
-                                worldDistanceEntities.push(progressiveLine);
+                                worldDistanceEntities.push(window.currentProgressiveLine);
+                            } else if (window.currentProgressiveLine && progressiveLinePositions.length > 1) {
+                                // Update existing line positions (smooth elongation)
+                                window.currentProgressiveLine.polyline.positions = progressiveLinePositions;
                             }
                             
                             // 2. MOVE LUKE'S HEAD along the line
                             lukeHeadEntity.position = Cesium.Cartesian3.fromDegrees(wrappedEndLng, 0, 800000);
                             
-                            // 3. SPIN THE EARTH to follow Luke!
-                            const currentHeading = Cesium.Math.toRadians(-currentAnimationDegrees * 0.8);
-                            viewer.scene.camera.setView({
-                                destination: viewer.camera.position,
-                                orientation: {
-                                    heading: currentHeading,
-                                    pitch: viewer.camera.pitch,
-                                    roll: viewer.camera.roll
-                                }
-                            });
+                            // 3. NO CAMERA MOVEMENT - prevents world shaking (user can manually follow Luke)
                             
                             // 4. UPDATE MILE COUNTER TICKER
                             const currentMiles = (currentAnimationDegrees / totalDegrees) * totalMiles;
                             const progress = Math.min((currentAnimationDegrees / totalDegrees) * 100, 100);
                             
-                            mileCounterEntity.label.text = `🏁 MILES: ${currentMiles.toFixed(0)} / ${totalMiles.toFixed(0)}\n💪 ${progress.toFixed(0)}% COMPLETE!`;
+                            mileCounterEntity.label.text = `🚀 MILES CRUSHED: ${currentMiles.toFixed(0)} / ${totalMiles.toFixed(0)} 🚀\n🔥 ${progress.toFixed(0)}% DOMINATION COMPLETE! 🔥`;
                             
-                            // 5. Update progress bubble with motivation
-                            if (infoEntity && infoEntity.label) {
-                                const motivationalText = progress < 20 ? '🏃‍♂️ Luke is warming up!' :
-                                                         progress < 40 ? '💪 Building momentum!' :
-                                                         progress < 60 ? '🚀 Luke is crushing it!' :
-                                                         progress < 80 ? '🔥 On fire now!' :
-                                                         progress < 100 ? '🎆 Almost legendary!' :
-                                                         '🎉 ABSOLUTE LEGEND!';
+                            // 5. EPIC POPUP BOXES AROUND LUKE'S FACE! 
+                            // Create fun popup boxes that appear around Luke every few frames
+                            if (!window.lukePopupBoxes) window.lukePopupBoxes = [];
+                            if (!window.lastPopupFrame) window.lastPopupFrame = 0;
+                            
+                            // Add new popup every 15 frames (1.5 seconds)
+                            if (currentAnimationDegrees - window.lastPopupFrame > animationSpeed * 15) {
+                                window.lastPopupFrame = currentAnimationDegrees;
                                 
-                                infoEntity.label.text = `🎆 ${activityType.toUpperCase()} 🎆\n\n📍 ${distanceKm.toFixed(1)} km total\n🌍 ${timesAroundWorld.toFixed(2)}x around world\n\n${motivationalText}`;
+                                // Get Luke's current position
+                                const lukePos = lukeHeadEntity.position.getValue(viewer.clock.currentTime);
+                                const lukeCartographic = Cesium.Cartographic.fromCartesian(lukePos);
+                                
+                                // Create random offset around Luke's head
+                                const offsetDistance = 0.05 + Math.random() * 0.1; // Random distance around head
+                                const offsetAngle = Math.random() * Math.PI * 2; // Random angle around head
+                                const offsetLng = lukeCartographic.longitude + Math.cos(offsetAngle) * offsetDistance;
+                                const offsetLat = lukeCartographic.latitude + Math.sin(offsetAngle) * offsetDistance;
+                                const offsetHeight = 800000 + (Math.random() - 0.5) * 200000; // Vary height slightly
+                                
+                                // Pick random fun message based on activity type
+                                const popupMessages = activityType === 'Cycling Distance' ? [
+                                    '🚴‍♂️💨 ZOOM!', '🔥 PEDAL POWER!', '⚡ LIGHTNING FAST!', '🚀 ROCKET LUKE!', 
+                                    '💪 BEAST MODE!', '👑 CYCLING KING!', '🌟 SUPERSTAR!', '🎯 UNSTOPPABLE!',
+                                    '🏆 LEGEND!', '💥 BOOM!', '🎆 AMAZING!', '🌪️ TORNADO!'
+                                ] : activityType === 'Running Distance' ? [
+                                    '🏃‍♂️⚡ ZOOM!', '💪 POWER!', '🔥 BLAZING!', '🚀 SUPERSONIC!',
+                                    '👑 RUNNING KING!', '⭐ CHAMPION!', '🎯 UNSTOPPABLE!', '🏆 LEGEND!',
+                                    '💥 EXPLOSIVE!', '🌟 SUPERSTAR!', '🎆 INCREDIBLE!', '⚡ LIGHTNING!'
+                                ] : [
+                                    '🎯💥 POW!', '🔥 EPIC!', '⚡ AMAZING!', '🚀 SUPERB!', 
+                                    '👑 CHAMPION!', '🏆 LEGEND!', '🌟 STAR!', '💪 BEAST!',
+                                    '🎆 WOW!', '💥 BOOM!', '🌪️ WILD!', '⭐ HERO!'
+                                ];
+                                
+                                const randomMessage = popupMessages[Math.floor(Math.random() * popupMessages.length)];
+                                
+                                // Create popup box entity
+                                const popupBox = viewer.entities.add({
+                                    position: Cesium.Cartesian3.fromRadians(offsetLng, offsetLat, offsetHeight),
+                                    label: {
+                                        text: randomMessage,
+                                        font: 'bold 14pt Impact, Arial Black, sans-serif',
+                                        fillColor: Cesium.Color.WHITE,
+                                        outlineColor: activityType === 'Cycling Distance' ? Cesium.Color.CYAN : 
+                                                      activityType === 'Running Distance' ? Cesium.Color.ORANGE : Cesium.Color.MAGENTA,
+                                        outlineWidth: 3,
+                                        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                                        backgroundColor: activityType === 'Cycling Distance' ? 
+                                            new Cesium.Color(0.0, 0.6, 1.0, 0.9) :
+                                            activityType === 'Running Distance' ?
+                                            new Cesium.Color(1.0, 0.4, 0.0, 0.9) :
+                                            new Cesium.Color(0.8, 0.2, 1.0, 0.9),
+                                        backgroundPadding: new Cesium.Cartesian2(15, 10),
+                                        showBackground: true,
+                                        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                                        scale: 0.8 + Math.random() * 0.4 // Random size variation
+                                    }
+                                });
+                                
+                                // Add to tracking arrays
+                                window.lukePopupBoxes.push({
+                                    entity: popupBox,
+                                    createdFrame: currentAnimationDegrees,
+                                    lifetime: 30 + Math.random() * 20 // Live for 3-5 seconds
+                                });
+                                worldDistanceEntities.push(popupBox);
+                            }
+                            
+                            // Clean up old popup boxes
+                            window.lukePopupBoxes = window.lukePopupBoxes.filter(popup => {
+                                const age = currentAnimationDegrees - popup.createdFrame;
+                                if (age > popup.lifetime) {
+                                    // Remove expired popup
+                                    if (viewer.entities.contains(popup.entity)) {
+                                        viewer.entities.remove(popup.entity);
+                                    }
+                                    return false; // Remove from array
+                                }
+                                return true; // Keep in array
+                            });
+                            
+                            // Update main info box with simpler text
+                            if (infoEntity && infoEntity.label) {
+                                const funUpdateText = activityType === 'Cycling Distance' ?
+                                    `🚴‍♂️💨 LUKE'S CYCLING CONQUEST! 💨🚴‍♂️\n\n🏆 ${currentMiles.toFixed(0)} of ${totalMiles.toFixed(0)} MILES CRUSHED!\n🌍 ${progress.toFixed(0)}% around PLANET EARTH!` :
+                                    activityType === 'Running Distance' ?
+                                    `🏃‍♂️⚡ LUKE'S RUNNING RAMPAGE! ⚡🏃‍♂️\n\n💪 ${currentMiles.toFixed(0)} of ${totalMiles.toFixed(0)} MILES DOMINATED!\n🌍 ${progress.toFixed(0)}% around the WORLD!` :
+                                    `🎯🌟 LUKE'S ATHLETIC DOMINATION! 🌟🎯\n\n🏅 ${currentMiles.toFixed(0)} of ${totalMiles.toFixed(0)} MILES CONQUERED!\n🌍 ${progress.toFixed(0)}% around our PLANET!`;
+                                
+                                infoEntity.label.text = funUpdateText;
                             }
                             
                             viewer.scene.requestRender();
@@ -2301,14 +2413,22 @@
             let celebrationFrame = 0;
             const confettiEntities = [];
             
-            // Update final messages
+            // Update EPIC final messages with more personality!
             if (infoEntity && infoEntity.label) {
-                infoEntity.label.text = `🎆 ${activityType.toUpperCase()} COMPLETE! 🎆\n\n📍 ${distanceKm.toFixed(1)} km total\n🌍 ${timesAroundWorld.toFixed(2)}x around world\n\n🎉 LUKE IS AN ABSOLUTE LEGEND! 🎉`;
+                const epicFinalText = activityType === 'Cycling Distance' ?
+                    `🚴‍♂️👑 CYCLING DEITY STATUS: ACHIEVED! 👑🚴‍♂️\n\n🏆 ${distanceKm.toFixed(1)} km of CYCLING SUPREMACY!\n🌍 ${timesAroundWorld.toFixed(2)}x around our ENTIRE PLANET!\n\n🎉 LUKE IS THE ULTIMATE CYCLING GOD! 🎉` :
+                    activityType === 'Running Distance' ?
+                    `🏃‍♂️👑 RUNNING DEITY STATUS: ACHIEVED! 👑🏃‍♂️\n\n💪 ${distanceKm.toFixed(1)} km of RUNNING DOMINANCE!\n🌍 ${timesAroundWorld.toFixed(2)}x around PLANET EARTH!\n\n🎉 LUKE IS THE ULTIMATE RUNNING GOD! 🎉` :
+                    `🎯👑 ATHLETIC DEITY STATUS: ACHIEVED! 👑🎯\n\n🏅 ${distanceKm.toFixed(1)} km of TOTAL SUPREMACY!\n🌍 ${timesAroundWorld.toFixed(2)}x around the WORLD!\n\n🎉 LUKE IS THE ULTIMATE ATHLETIC GOD! 🎉`;
+                    
+                infoEntity.label.text = epicFinalText;
             }
             
             if (mileCounterEntity && mileCounterEntity.label) {
-                mileCounterEntity.label.text = `🎆 FINAL SCORE 🎆\n${totalMiles.toFixed(0)} MILES CRUSHED!\n🎉 LEGENDARY! 🎉`;
+                mileCounterEntity.label.text = `👑 FINAL LEGENDARY SCORE 👑\n🚀 ${totalMiles.toFixed(0)} MILES OF PURE DOMINANCE! 🚀\n🎆 DEITY MODE: ACTIVATED! 🎆`;
                 mileCounterEntity.label.backgroundColor = Cesium.Color.GOLD.withAlpha(0.9);
+                mileCounterEntity.label.outlineColor = Cesium.Color.ORANGE;
+                mileCounterEntity.label.outlineWidth = 3;
             }
             
             const celebrationAnimation = setInterval(() => {
@@ -2329,12 +2449,13 @@
                         );
                     }
                     
-                    // 2. SPAWN CONFETTI around the globe!
+                    // 2. SPAWN CONFETTI around the globe! (Fixed z-order)
                     if (celebrationFrame % 3 === 0) { // Every 3 frames
                         for (let i = 0; i < 5; i++) {
                             const randomLng = (Math.random() - 0.5) * 360;
                             const randomLat = (Math.random() - 0.5) * 180;
-                            const confettiHeight = 1000000 + Math.random() * 2000000;
+                            // Keep confetti high above Earth surface to prevent z-fighting
+                            const confettiHeight = 8000000 + Math.random() * 5000000; // Much higher altitude
                             
                             const confetti = viewer.entities.add({
                                 position: Cesium.Cartesian3.fromDegrees(randomLng, randomLat, confettiHeight),
@@ -2342,7 +2463,8 @@
                                     pixelSize: 8 + Math.random() * 8,
                                     color: [Cesium.Color.RED, Cesium.Color.BLUE, Cesium.Color.YELLOW, 
                                            Cesium.Color.GREEN, Cesium.Color.MAGENTA, Cesium.Color.CYAN][Math.floor(Math.random() * 6)],
-                                    disableDepthTestDistance: Number.POSITIVE_INFINITY
+                                    // Remove depth test disable to respect proper z-ordering
+                                    heightReference: Cesium.HeightReference.NONE
                                 }
                             });
                             confettiEntities.push(confetti);
