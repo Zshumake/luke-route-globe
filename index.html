@@ -200,6 +200,51 @@
             height: 100%;
         }
 
+        /* Top-left overlay for distance animations */
+        .distance-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 20px;
+            border: 2px solid rgba(139, 92, 246, 0.3);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            color: white;
+            font-family: 'Arial Black', Arial, sans-serif;
+            min-width: 280px;
+            display: none;
+        }
+
+        .distance-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+            background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .distance-counter {
+            font-size: 36px;
+            font-weight: bold;
+            text-align: center;
+            color: #fbbf24;
+            text-shadow: 0 2px 8px rgba(251, 191, 36, 0.5);
+            margin: 15px 0;
+        }
+
+        .distance-progress {
+            font-size: 14px;
+            color: #94a3b8;
+            text-align: center;
+            margin-top: 10px;
+        }
+
         /* Loading screen */
         .loading-screen {
             position: absolute;
@@ -266,12 +311,11 @@
                 <h1>🌍 Luke's Routes</h1>
                 <p>Explore athletic adventures worldwide</p>
                 
-                <!-- Luke's Head Image Section (Hidden by default) -->
-                <div id="lukeHeadPreview" style="display: none; margin-top: 10px;">
+                <!-- Luke's Head Image Section (Hidden - for animation use only) -->
+                <div id="lukeHeadPreview" style="display: none;">
                     <img id="lukeHeadImg" src="" alt="Luke's Face" style="width: 60px; height: 60px; object-fit: cover;">
-                    <div style="font-size: 12px; margin-top: 5px; color: #10b981; font-weight: bold;">Luke's Face Ready! 🎆</div>
                 </div>
-                <button id="uploadLukeHeadBtn" style="display: none; margin-top: 8px; padding: 6px 12px; background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); color: white; border: none; border-radius: 6px; font-size: 11px; cursor: pointer;">
+                <button id="uploadLukeHeadBtn" style="display: none;">
                     📷 Luke's Face Status
                 </button>
             </div>
@@ -293,22 +337,14 @@
                 </div>
                 
                 <div class="world-distance" style="margin: 15px 0;">
-                    <div style="text-align: center; margin-bottom: 10px; font-weight: bold; color: #fbbf24;">🌎 Distance Around World</div>
-                    <div class="distance-buttons" style="display: flex; flex-direction: column; gap: 8px;">
-                        <button id="showCyclingAroundWorldBtn" class="filter-btn" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); font-size: 12px;">
-                            🚴‍♂️ Cycling Distance
-                        </button>
-                        <button id="showRunningAroundWorldBtn" class="filter-btn" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); font-size: 12px;">
-                            🏃‍♂️ Running Distance
-                        </button>
-                        <button id="showTotalAroundWorldBtn" class="filter-btn" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); font-size: 12px;">
-                            🌍 Total Distance
-                        </button>
-                    </div>
-                    <button id="clearWorldDistanceBtn" class="filter-btn" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); font-size: 11px; margin-top: 8px; width: 100%;">
+                    <div style="text-align: center; margin-bottom: 10px; font-weight: bold; color: #fbbf24;">🌎 Distance Visualization</div>
+                    <button id="showTotalAroundWorldBtn" class="filter-btn" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); font-size: 12px; width: 100%; margin-bottom: 8px;">
+                        🌍 Show Total Distance Around World
+                    </button>
+                    <button id="clearWorldDistanceBtn" class="filter-btn" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); font-size: 11px; width: 100%; margin-bottom: 4px;">
                         Clear Visualization
                     </button>
-                    <button id="restoreEarthBtn" class="filter-btn" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); font-size: 11px; margin-top: 4px; width: 100%;">
+                    <button id="restoreEarthBtn" class="filter-btn" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); font-size: 11px; width: 100%;">
                         🌍 Emergency Restore Earth
                     </button>
                 </div>
@@ -350,6 +386,13 @@
         <!-- Globe -->
         <div class="globe-container">
             <div id="cesiumContainer"></div>
+            
+            <!-- Distance Animation Overlay -->
+            <div id="distanceOverlay" class="distance-overlay">
+                <div class="distance-title">🌍 Luke's Epic Journey</div>
+                <div class="distance-counter" id="distanceCounter">0 km</div>
+                <div class="distance-progress" id="distanceProgress">Starting adventure...</div>
+            </div>
             
             <div class="loading-screen" id="loadingScreen">
                 <div class="spinner"></div>
@@ -2405,6 +2448,12 @@
             try {
                 console.log('🧽 CLEARING world distance visualization...');
                 
+                // Hide the clean overlay
+                const overlay = document.getElementById('distanceOverlay');
+                if (overlay) {
+                    overlay.style.display = 'none';
+                }
+                
                 // Stop any running animation
                 if (worldDistanceAnimation) {
                     clearInterval(worldDistanceAnimation);
@@ -2944,53 +2993,117 @@
             }, 100);
         }
         
-        // Show cycling distance around world
-        function showCyclingAroundWorld() {
+        // New clean animation with top-left overlay (no floating text boxes)
+        function animateDistanceAroundWorldClean(distanceKm) {
             try {
-                console.log('🚴‍♂️ CYCLING BUTTON CLICKED - Starting calculation...');
-                const { cyclingDistance } = calculateTotalDistances();
+                console.log(`🌎 CLEAN ANIMATION: ${distanceKm.toFixed(1)}km`);
                 
-                if (cyclingDistance > 0) {
-                    console.log(`🚴‍♂️ Starting cycling animation: ${cyclingDistance.toFixed(1)}km`);
-                    animateDistanceAroundWorld(cyclingDistance, Cesium.Color.BLUE, 'Cycling Distance');
-                } else {
-                    console.log('⚠️ No cycling distance to display');
-                    alert('No cycling routes found to visualize!');
-                }
+                // Show the overlay
+                const overlay = document.getElementById('distanceOverlay');
+                const counter = document.getElementById('distanceCounter');
+                const progress = document.getElementById('distanceProgress');
+                
+                overlay.style.display = 'block';
+                
+                // Calculate animation parameters
+                const earthCircumference = 40075; // km at equator
+                const totalDegrees = Math.min((distanceKm / earthCircumference) * 360, 360);
+                const timesAroundWorld = distanceKm / earthCircumference;
+                
+                // Setup animation variables
+                let currentDistance = 0;
+                let currentDegrees = 0;
+                const maxFrames = 120; // 2 seconds at 60fps
+                const distanceStep = distanceKm / maxFrames;
+                const degreesStep = totalDegrees / maxFrames;
+                let frame = 0;
+                
+                // Get Luke's face for animation
+                const lukeHeadImg = document.getElementById('lukeHeadImg');
+                const hasCustomImage = lukeHeadImg && lukeHeadImg.src && 
+                    (lukeHeadImg.src.includes('Luke') || lukeHeadImg.src.includes('.png'));
+                
+                // Create line and Luke's head
+                const ROUTE_LATITUDE = 40.0;
+                const EQUATOR_START_LONGITUDE = -120.0;
+                let progressiveLinePositions = [];
+                
+                const lukeHeadEntity = viewer.entities.add({
+                    position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE, ROUTE_LATITUDE, 800000),
+                    billboard: hasCustomImage ? {
+                        image: lukeHeadImg.src,
+                        width: 80,
+                        height: 80,
+                        disableDepthTestDistance: Number.POSITIVE_INFINITY
+                    } : {
+                        image: '🤩',
+                        font: '48px Arial',
+                        disableDepthTestDistance: Number.POSITIVE_INFINITY
+                    }
+                });
+                worldDistanceEntities.push(lukeHeadEntity);
+                
+                // Animation loop
+                const animation = setInterval(() => {
+                    frame++;
+                    currentDistance += distanceStep;
+                    currentDegrees += degreesStep;
+                    
+                    // Update counter
+                    counter.textContent = `${currentDistance.toFixed(0)} km`;
+                    progress.textContent = `${(currentDistance / distanceKm * 100).toFixed(0)}% complete • ${timesAroundWorld.toFixed(2)}x around world`;
+                    
+                    // Update line
+                    const wrappedEndLng = ((EQUATOR_START_LONGITUDE + currentDegrees + 180) % 360) - 180;
+                    progressiveLinePositions.push(Cesium.Cartesian3.fromDegrees(wrappedEndLng, ROUTE_LATITUDE, 800000));
+                    
+                    if (window.currentProgressiveLine) {
+                        window.currentProgressiveLine.polyline.positions = progressiveLinePositions;
+                    } else {
+                        window.currentProgressiveLine = viewer.entities.add({
+                            polyline: {
+                                positions: progressiveLinePositions,
+                                width: 12,
+                                material: Cesium.Color.PURPLE.withAlpha(0.9),
+                                show: true
+                            }
+                        });
+                        worldDistanceEntities.push(window.currentProgressiveLine);
+                    }
+                    
+                    // Move Luke's head
+                    lukeHeadEntity.position = Cesium.Cartesian3.fromDegrees(wrappedEndLng, ROUTE_LATITUDE, 800000);
+                    
+                    viewer.scene.requestRender();
+                    
+                    // End animation
+                    if (frame >= maxFrames) {
+                        clearInterval(animation);
+                        progress.textContent = `🎆 EPIC JOURNEY COMPLETE! ${timesAroundWorld.toFixed(2)}x around the world! 🎆`;
+                        
+                        // Brief celebration, then hide overlay
+                        setTimeout(() => {
+                            overlay.style.display = 'none';
+                        }, 3000);
+                    }
+                    
+                }, 33); // ~30fps for smooth animation
+                
             } catch (error) {
-                console.error('❌ Error in showCyclingAroundWorld:', error);
-                alert('Error displaying cycling distance. Check console for details.');
+                console.error('❌ Clean animation error:', error);
+                document.getElementById('distanceOverlay').style.display = 'none';
             }
         }
         
-        // Show running distance around world
-        function showRunningAroundWorld() {
-            try {
-                console.log('🏃‍♂️ RUNNING BUTTON CLICKED - Starting calculation...');
-                const { runningDistance } = calculateTotalDistances();
-                
-                if (runningDistance > 0) {
-                    console.log(`🏃‍♂️ Starting running animation: ${runningDistance.toFixed(1)}km`);
-                    animateDistanceAroundWorld(runningDistance, Cesium.Color.RED, 'Running Distance');
-                } else {
-                    console.log('⚠️ No running distance to display');
-                    alert('No running routes found to visualize!');
-                }
-            } catch (error) {
-                console.error('❌ Error in showRunningAroundWorld:', error);
-                alert('Error displaying running distance. Check console for details.');
-            }
-        }
-        
-        // Show total distance around world
+        // Show total distance around world with clean top-left display
         function showTotalAroundWorld() {
             try {
-                console.log('🌍 TOTAL BUTTON CLICKED - Starting calculation...');
+                console.log('🌍 TOTAL DISTANCE ANIMATION - Starting...');
                 const { totalDistance } = calculateTotalDistances();
                 
                 if (totalDistance > 0) {
                     console.log(`🌍 Starting total animation: ${totalDistance.toFixed(1)}km`);
-                    animateDistanceAroundWorld(totalDistance, Cesium.Color.PURPLE, 'Total Distance');
+                    animateDistanceAroundWorldClean(totalDistance);
                 } else {
                     console.log('⚠️ No total distance to display');
                     alert('No routes found to visualize!');
@@ -3122,17 +3235,7 @@
                 });
             }
             
-            // Around-the-world distance visualization buttons
-            const cyclingAroundWorldBtn = document.getElementById('showCyclingAroundWorldBtn');
-            if (cyclingAroundWorldBtn) {
-                cyclingAroundWorldBtn.addEventListener('click', showCyclingAroundWorld);
-            }
-            
-            const runningAroundWorldBtn = document.getElementById('showRunningAroundWorldBtn');
-            if (runningAroundWorldBtn) {
-                runningAroundWorldBtn.addEventListener('click', showRunningAroundWorld);
-            }
-            
+            // Around-the-world distance visualization button (only total now)
             const totalAroundWorldBtn = document.getElementById('showTotalAroundWorldBtn');
             if (totalAroundWorldBtn) {
                 totalAroundWorldBtn.addEventListener('click', showTotalAroundWorld);
