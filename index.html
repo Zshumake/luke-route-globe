@@ -706,7 +706,8 @@
                 testImg.onload = () => {
                     console.log('✅ Image loaded successfully:', imageSource);
                     lukeHeadImg.src = imageSource;
-                    lukeHeadPreview.style.display = 'block';
+                    // FIXED: Don't show the hidden preview - Luke's image is already visible in the profile section
+                    // lukeHeadPreview.style.display = 'block'; // REMOVED - this was causing duplicate box
                     uploadBtn.textContent = '🎆 Luke\'s Face Ready!';
                     uploadBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
                     console.log(`🎆 Luke\'s head image set successfully`);
@@ -3114,18 +3115,24 @@
                     window.usedPopupMessages = []; // Reset unique message tracker
                 }
                 
-                // Remove all world distance entities safely
+                // Remove all world distance entities safely (PRESERVE cluster markers)
                 if (viewer && viewer.entities && worldDistanceEntities.length > 0) {
                     worldDistanceEntities.forEach((entity, index) => {
                         try {
                             if (entity && viewer.entities.contains(entity)) {
-                                viewer.entities.remove(entity);
+                                // CRITICAL: Check if this entity is a cluster marker - if so, DON'T remove it
+                                const isClusterMarker = clusterMarkers.includes(entity);
+                                if (!isClusterMarker) {
+                                    viewer.entities.remove(entity);
+                                } else {
+                                    console.log(`🛡️ Preserving cluster marker during animation cleanup`);
+                                }
                             }
                         } catch (entityError) {
                             console.warn(`⚠️ Error removing entity ${index}:`, entityError);
                         }
                     });
-                    console.log(`✅ Removed ${worldDistanceEntities.length} entities`);
+                    console.log(`✅ Removed ${worldDistanceEntities.length} entities (preserving cluster markers)`);
                 }
                 
                 worldDistanceEntities = [];
@@ -3562,9 +3569,9 @@
                         );
                     }
                     
-                    // 2. ENHANCED CONFETTI PARTICLE SYSTEM with falling physics!
-                    if (celebrationFrame % 2 === 0) { // More frequent spawning
-                        for (let i = 0; i < 8; i++) { // More confetti particles
+                    // 2. Gentle confetti particle system with falling physics (toned back)
+                    if (celebrationFrame % 4 === 0) { // Less frequent spawning
+                        for (let i = 0; i < 5; i++) { // Fewer confetti particles
                             const randomLng = (Math.random() - 0.5) * 360;
                             const randomLat = (Math.random() - 0.5) * 180;
                             const startHeight = 12000000 + Math.random() * 3000000; // Higher spawn altitude
@@ -3774,21 +3781,21 @@
                         return progressiveLinePositions;
                     }, false);
                     
-                    // ENHANCED: Faster, more dynamic Luke head movements!
-                    const fastTiltCycle = Math.sin(elapsedSeconds * 0.8) * 0.4; // FASTER: 0.8 vs 0.3, larger tilt 0.4 vs 0.35
-                    const verticalBob = Math.sin(elapsedSeconds * 1.2) * 15000; // UP/DOWN bobbing motion
-                    const lateralSway = Math.cos(elapsedSeconds * 0.6) * 8000; // LEFT/RIGHT swaying
+                    // Subtle Luke head movements (toned back from intense version)
+                    const tiltCycle = Math.sin(elapsedSeconds * 0.3) * 0.25; // RESTORED: gentle 0.3 speed, smaller 0.25 tilt
+                    const subtleVerticalBob = Math.sin(elapsedSeconds * 0.4) * 5000; // Reduced bobbing: 5k vs 15k units
+                    const subtleLateralSway = Math.cos(elapsedSeconds * 0.2) * 2000; // Reduced swaying: 2k vs 8k units
                     
-                    // Enhanced position with celebration movements (up/down/left/right)
-                    const enhancedPosition = Cesium.Cartesian3.fromDegrees(
-                        wrappedLng + (lateralSway / 111000), // Convert meters to degrees approx
+                    // Gentle position with subtle movements
+                    const gentlePosition = Cesium.Cartesian3.fromDegrees(
+                        wrappedLng + (subtleLateralSway / 111000), // Much smaller lateral movement
                         routeLatitude,
-                        800000 + verticalBob // Dynamic height with bobbing
+                        800000 + subtleVerticalBob // Gentle height variation
                     );
                     
-                    lukeHeadEntity.position = enhancedPosition;
+                    lukeHeadEntity.position = gentlePosition;
                     if (lukeHeadEntity.billboard) {
-                        lukeHeadEntity.billboard.rotation = fastTiltCycle; // Faster head tilting during travel
+                        lukeHeadEntity.billboard.rotation = tiltCycle; // Gentle head tilting during travel
                     }
                     
                     // Sparkle trail effects
@@ -3833,6 +3840,14 @@
                             // CRITICAL: Re-enable camera corrections after animation ends
                             isAnimationInProgress = false;
                             console.log('✨ Animation completed - camera corrections re-enabled');
+                            
+                            // FIXED: Force recreation of cluster markers after animation
+                            setTimeout(() => {
+                                if (clusterMarkers.length === 0 && sampleRoutes.length > 0) {
+                                    console.log('🔄 Recreating cluster markers after animation completion');
+                                    createClusterMarkers();
+                                }
+                            }, 500); // Short delay to ensure camera is settled
                         }, 4000); // Shorter for 15-second animation
                     }
                     
@@ -3852,28 +3867,28 @@
             const celebrationDance = setInterval(() => {
                 celebrationFrame++;
                 
-                // ULTRA-ENERGETIC celebration movements! 
-                const fasterRocking = Math.sin(celebrationFrame * 1.2) * 0.8; // MUCH FASTER tilting
-                const wildBouncing = Math.abs(Math.sin(celebrationFrame * 0.9)) * 80000; // HIGHER bouncing
-                const leftRightDance = Math.sin(celebrationFrame * 1.4) * 12000; // LEFT/RIGHT dancing
-                const circularMotion = Math.cos(celebrationFrame * 0.7) * 10000; // CIRCULAR movement
+                // Gentle celebration movements (toned back from ultra-energetic)
+                const gentleRocking = Math.sin(celebrationFrame * 0.6) * 0.4; // RESTORED: slower, moderate tilting  
+                const softBouncing = Math.abs(Math.sin(celebrationFrame * 0.4)) * 30000; // REDUCED: gentler bouncing
+                const subtleDance = Math.sin(celebrationFrame * 0.5) * 4000; // REDUCED: subtle left/right movement
+                const lightCircular = Math.cos(celebrationFrame * 0.3) * 3000; // REDUCED: gentle circular movement
                 
-                // Get current position and add ALL celebration movements!
+                // Get current position and add gentle celebration movements
                 const currentPos = lukeHeadEntity.position.getValue(viewer.clock.currentTime);
                 const cartographic = Cesium.Cartographic.fromCartesian(currentPos);
                 
-                // ENHANCED: Multi-dimensional celebration dance!
-                const celebrationHeight = 800000 + wildBouncing; // Dynamic height bouncing
-                const celebrationLng = cartographic.longitude + (leftRightDance / 111000); // LEFT/RIGHT dancing
-                const celebrationLat = cartographic.latitude + (circularMotion / 111000); // CIRCULAR movement
+                // Gentle multi-dimensional celebration
+                const celebrationHeight = 800000 + softBouncing; // Moderate height bouncing
+                const celebrationLng = cartographic.longitude + (subtleDance / 111000); // Subtle left/right
+                const celebrationLat = cartographic.latitude + (lightCircular / 111000); // Gentle circular
                 
-                // Update position with FULL 3D celebration dance!
+                // Update position with gentle 3D celebration
                 lukeHeadEntity.position = Cesium.Cartesian3.fromRadians(
                     celebrationLng, celebrationLat, celebrationHeight
                 );
                 
                 if (lukeHeadEntity.billboard) {
-                    lukeHeadEntity.billboard.rotation = fasterRocking; // MUCH faster head rocking
+                    lukeHeadEntity.billboard.rotation = gentleRocking; // Moderate head rocking
                 }
                 
                 // Add celebration sparkles
@@ -3918,6 +3933,14 @@
                     // CRITICAL: Ensure animation flag is cleared
                     isAnimationInProgress = false;
                     console.log('✨ Celebration completed - camera corrections fully re-enabled');
+                    
+                    // FIXED: Force recreation of cluster markers after celebration
+                    setTimeout(() => {
+                        if (clusterMarkers.length === 0 && sampleRoutes.length > 0) {
+                            console.log('🔄 Recreating cluster markers after celebration completion');
+                            createClusterMarkers();
+                        }
+                    }, 500); // Short delay to ensure everything is settled
                 }
                 
             }, 33); // 30fps celebration
