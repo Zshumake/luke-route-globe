@@ -483,67 +483,90 @@
         let currentFilter = 'all';
         let showZwiftRoutes = false; // Hide Zwift routes by default
         
-        // Enhanced Zwift route detection with debugging
+        // ENHANCED: Reliable Zwift detection using Strava's official data fields
         function isZwiftRoute(route) {
             if (!route || !route.name) return false;
             
-            const routeName = route.name.toLowerCase();
-            const routeType = route.type ? route.type.toLowerCase() : '';
             let detectedReason = null;
             
-            // Known Zwift world indicators
-            const zwiftWorlds = [
-                'zwift', 'watopia', 'makuri', 'richmond', 'london', 'innsbruck', 
-                'yorkshire', 'crit city', 'france', 'paris', 'new york'
-            ];
-            
-            // Zwift-specific route patterns
-            const zwiftPatterns = [
-                'workout', 'group workout', 'group ride', 'free ride',
-                'training', 'structured workout', 'meetup', 'race',
-                'climb portal', 'descent', 'alpe du', 'epic kom',
-                'tour de', 'stage', 'challenge'
-            ];
-            
-            // Check for Zwift worlds
-            for (const world of zwiftWorlds) {
-                if (routeName.includes(world)) {
-                    detectedReason = `world: ${world}`;
-                    break;
-                }
+            // PRIORITY 1: Use Strava's most reliable indoor indicators (minimal data)
+            if (route.trainer === true) {
+                detectedReason = 'Strava trainer flag';
+            } else if (route.sport_type === 'VirtualRide') {
+                detectedReason = 'Strava VirtualRide type';
             }
             
-            // Check for Zwift activity patterns  
+            // PRIORITY 2: Only if Strava fields don't give a definitive answer, check name patterns
             if (!detectedReason) {
-                for (const pattern of zwiftPatterns) {
-                    if (routeName.includes(pattern)) {
-                        detectedReason = `pattern: ${pattern}`;
+                const routeName = route.name.toLowerCase();
+                
+                // Strong Zwift indicators (virtual worlds that don't exist in reality)
+                const zwiftVirtualWorlds = [
+                    'zwift', 'watopia', 'makuri', 'crit city'
+                ];
+                
+                // Real places that are only Zwift when combined with "zwift" 
+                const zwiftRealPlaces = [
+                    'richmond', 'london', 'innsbruck', 'yorkshire', 'france', 'paris', 'new york'
+                ];
+                
+                // Zwift-specific activity patterns (made more specific)
+                const zwiftPatterns = [
+                    'group workout', 'structured workout', 'free ride',
+                    'climb portal', 'alpe du', 'epic kom',
+                    'min workout', 'workout on', 'workout in' // Zwift format: "30 Min Workout on..."
+                ];
+                
+                // Check for virtual Zwift worlds (always Zwift)
+                for (const world of zwiftVirtualWorlds) {
+                    if (routeName.includes(world)) {
+                        detectedReason = `virtual world: ${world}`;
                         break;
                     }
                 }
-            }
-            
-            // Check for indoor indicators (no GPS coordinates but still has distance)
-            if (!detectedReason && route.distance > 0 && (!route.coordinates || route.coordinates.length === 0)) {
-                detectedReason = 'no GPS coords';
-            }
-            
-            // Check for repetitive/perfect GPS patterns (Zwift generates fake GPS sometimes)
-            if (!detectedReason && route.coordinates && route.coordinates.length > 10) {
-                const uniqueCoords = new Set(route.coordinates.map(coord => `${coord[0].toFixed(6)},${coord[1].toFixed(6)}`));
-                const uniqueRatio = uniqueCoords.size / route.coordinates.length;
                 
-                // If less than 30% unique coordinates, likely virtual/indoor
-                if (uniqueRatio < 0.3) {
-                    detectedReason = `repetitive GPS (${(uniqueRatio*100).toFixed(1)}% unique)`;
+                // Check for real places combined with "zwift" (more specific)
+                if (!detectedReason) {
+                    for (const place of zwiftRealPlaces) {
+                        if (routeName.includes('zwift') && routeName.includes(place)) {
+                            detectedReason = `zwift + real place: ${place}`;
+                            break;
+                        }
+                    }
+                }
+                
+                // Check for Zwift activity patterns  
+                if (!detectedReason) {
+                    for (const pattern of zwiftPatterns) {
+                        if (routeName.includes(pattern)) {
+                            detectedReason = `pattern: ${pattern}`;
+                            break;
+                        }
+                    }
+                }
+                
+                // LAST RESORT: GPS-based detection (only if no other indicators)
+                if (!detectedReason && route.distance > 0 && (!route.coordinates || route.coordinates.length === 0)) {
+                    detectedReason = 'no GPS coords';
                 }
             }
             
             const isZwift = !!detectedReason;
             
-            // Debug logging for first few detections
-            if (isZwift && Math.random() < 0.1) { // 10% sampling to avoid spam
+            // Debug logging for detections - increased sampling for debugging
+            if (isZwift && Math.random() < 0.3) { // 30% sampling to see more examples
                 console.log(`🏃 ZWIFT DETECTED: "${route.name}" - ${detectedReason}`);
+            }
+            
+            // ENHANCED DEBUG: Show detection method and key Strava fields for first 10 routes
+            if (window.routeClassificationCount === undefined) window.routeClassificationCount = 0;
+            if (window.routeClassificationCount < 10) {
+                window.routeClassificationCount++;
+                const stravaData = `trainer:${route.trainer}, sport_type:${route.sport_type}`;
+                console.log(`${isZwift ? '🏠' : '🌍'} Route ${window.routeClassificationCount}: "${route.name}"`);
+                console.log(`   📊 Strava: ${stravaData}`);
+                console.log(`   🎯 Result: ${isZwift ? `INDOOR (${detectedReason})` : 'OUTDOOR'}`);
+                console.log(''); // Blank line for readability
             }
             
             return isZwift;
@@ -1037,7 +1060,7 @@
                 }
             }
             
-            // MINIMAL: Return only fields we actually use in the app
+            // ENHANCED: Include Strava fields for reliable indoor activity detection
             return {
                 id: activity.id.toString(),
                 name: activity.name || 'Untitled',
@@ -1048,7 +1071,11 @@
                         ? 'cycling' : 'running';
                 })(),
                 distance: Math.round((activity.distance || 0) / 100) / 10, // Faster: meters to km
-                coordinates: coordinates // Only GPS data we need
+                coordinates: coordinates, // Only GPS data we need
+                
+                // MINIMAL: Only the most reliable indoor detection field
+                trainer: activity.trainer, // Boolean: true for indoor trainer (covers Zwift, TrainerRoad, etc.)
+                sport_type: activity.sport_type || activity.type // VirtualRide type as secondary indicator
             };
         }
         
@@ -2024,6 +2051,8 @@
         
         function createClusterMarkers() {
             try {
+                console.log(`🔧 DEBUG: createClusterMarkers called - current markers: ${clusterMarkers.length}, routes: ${sampleRoutes.length}, animation in progress: ${isAnimationInProgress}`);
+                
                 // ROBUST: Clear existing cluster markers safely with better error handling
                 clusterMarkers.forEach(marker => {
                     try {
@@ -2056,8 +2085,13 @@
             }
             
             const filteredRoutes = sampleRoutes.filter(route => {
-                return currentFilter === 'all' || route.type === currentFilter;
+                const matchesTypeFilter = currentFilter === 'all' || route.type === currentFilter;
+                const isZwiftActivity = isZwiftRoute(route);
+                const shouldInclude = matchesTypeFilter && (!isZwiftActivity || showZwiftRoutes);
+                return shouldInclude;
             });
+            
+            console.log(`🔧 DEBUG: Cluster filtering - Total routes: ${sampleRoutes.length}, After type filter: ${sampleRoutes.filter(r => currentFilter === 'all' || r.type === currentFilter).length}, After Zwift filter: ${filteredRoutes.length}, showZwiftRoutes: ${showZwiftRoutes}`);
             
             const clusters = clusterRoutes(filteredRoutes, 100); // 100km clustering radius
             
@@ -2091,8 +2125,16 @@
                     if (!isAnimationInProgress) { // Don't interfere with animations
                         const currentHeight = viewer.camera.positionCartographic.height;
                         
+                        // Check if we have any routes that should be visible (after Zwift filtering)
+                        const visibleRoutes = sampleRoutes.filter(route => {
+                            const matchesTypeFilter = currentFilter === 'all' || route.type === currentFilter;
+                            const isZwiftActivity = isZwiftRoute(route);
+                            const shouldInclude = matchesTypeFilter && (!isZwiftActivity || showZwiftRoutes);
+                            return shouldInclude;
+                        });
+                        
                         // If we should have markers but don't, recreate them
-                        if (currentHeight > 1000000 && clusterMarkers.length === 0 && sampleRoutes.length > 0) {
+                        if (currentHeight > 1000000 && clusterMarkers.length === 0 && visibleRoutes.length > 0) {
                             console.log('🚑 MARKER RECOVERY: No markers found when they should exist - recreating...');
                             createClusterMarkers();
                         }
@@ -3137,6 +3179,14 @@
                 
                 worldDistanceEntities = [];
                 
+                // IMMEDIATE marker safety check after clearing
+                setTimeout(() => {
+                    if (clusterMarkers.length === 0 && sampleRoutes.length > 0) {
+                        console.log('🚑 IMMEDIATE marker recovery after clearing visualization');
+                        createClusterMarkers();
+                    }
+                }, 100); // Very quick check
+                
                 // Request render
                 if (viewer && viewer.scene && viewer.scene.requestRender) {
                     viewer.scene.requestRender();
@@ -3680,6 +3730,35 @@
             }, 100);
         }
         
+        // CRITICAL: Emergency marker restoration function
+        function ensureMarkersExist() {
+            console.log('🚑 EMERGENCY: Checking if markers exist and forcing recreation if needed');
+            
+            // Check if we have any routes that should be visible (after Zwift filtering)
+            const visibleRoutes = sampleRoutes.filter(route => {
+                const matchesTypeFilter = currentFilter === 'all' || route.type === currentFilter;
+                const isZwiftActivity = isZwiftRoute(route);
+                const shouldInclude = matchesTypeFilter && (!isZwiftActivity || showZwiftRoutes);
+                return shouldInclude;
+            });
+            
+            console.log(`🔧 Emergency check: ${clusterMarkers.length} markers exist, ${visibleRoutes.length} routes should be visible (${sampleRoutes.length} total, showZwiftRoutes: ${showZwiftRoutes})`);
+            
+            if (clusterMarkers.length === 0 && visibleRoutes.length > 0 && !isAnimationInProgress) {
+                console.log('🚨 EMERGENCY RECREATION: Markers missing - forcing recreation now!');
+                createClusterMarkers();
+                return true; // Recreated
+            } else if (isAnimationInProgress) {
+                console.log('⏳ Animation in progress - will check markers again later');
+                setTimeout(ensureMarkersExist, 1000); // Check again in 1 second
+                return false; // Deferred
+            } else if (visibleRoutes.length === 0) {
+                console.log('ℹ️ No visible routes available - markers correctly empty');
+                return false; // Correct state
+            }
+            return false; // Not needed
+        }
+        
         // Enhanced 15-second animation with head rotation and celebration dance
         function animateEpicJourneyEnhanced(distanceKm) {
             try {
@@ -3781,21 +3860,15 @@
                         return progressiveLinePositions;
                     }, false);
                     
-                    // Subtle Luke head movements (toned back from intense version)
-                    const tiltCycle = Math.sin(elapsedSeconds * 0.3) * 0.25; // RESTORED: gentle 0.3 speed, smaller 0.25 tilt
-                    const subtleVerticalBob = Math.sin(elapsedSeconds * 0.4) * 5000; // Reduced bobbing: 5k vs 15k units
-                    const subtleLateralSway = Math.cos(elapsedSeconds * 0.2) * 2000; // Reduced swaying: 2k vs 8k units
+                    // SIMPLE travel animation: ONLY rotation (NO position movement)
+                    const travelRotation = Math.sin(elapsedSeconds * 0.5) * 0.3; // Moderate speed and angle
                     
-                    // Gentle position with subtle movements
-                    const gentlePosition = Cesium.Cartesian3.fromDegrees(
-                        wrappedLng + (subtleLateralSway / 111000), // Much smaller lateral movement
-                        routeLatitude,
-                        800000 + subtleVerticalBob // Gentle height variation
-                    );
+                    // NO vertical bobbing or lateral swaying - Luke follows the route path exactly
+                    // Position follows the route precisely without extra movements
+                    lukeHeadEntity.position = newPosition; // Exact route position only
                     
-                    lukeHeadEntity.position = gentlePosition;
                     if (lukeHeadEntity.billboard) {
-                        lukeHeadEntity.billboard.rotation = tiltCycle; // Gentle head tilting during travel
+                        lukeHeadEntity.billboard.rotation = travelRotation; // Simple head tilting during travel
                     }
                     
                     // Sparkle trail effects
@@ -3843,10 +3916,9 @@
                             
                             // FIXED: Force recreation of cluster markers after animation
                             setTimeout(() => {
-                                if (clusterMarkers.length === 0 && sampleRoutes.length > 0) {
-                                    console.log('🔄 Recreating cluster markers after animation completion');
-                                    createClusterMarkers();
-                                }
+                                console.log('🔄 FORCE checking marker recreation after animation completion');
+                                console.log(`🔧 Current state: markers=${clusterMarkers.length}, routes=${sampleRoutes.length}, animating=${isAnimationInProgress}`);
+                                ensureMarkersExist(); // Use emergency restoration function
                             }, 500); // Short delay to ensure camera is settled
                         }, 4000); // Shorter for 15-second animation
                     }
@@ -3867,28 +3939,15 @@
             const celebrationDance = setInterval(() => {
                 celebrationFrame++;
                 
-                // Gentle celebration movements (toned back from ultra-energetic)
-                const gentleRocking = Math.sin(celebrationFrame * 0.6) * 0.4; // RESTORED: slower, moderate tilting  
-                const softBouncing = Math.abs(Math.sin(celebrationFrame * 0.4)) * 30000; // REDUCED: gentler bouncing
-                const subtleDance = Math.sin(celebrationFrame * 0.5) * 4000; // REDUCED: subtle left/right movement
-                const lightCircular = Math.cos(celebrationFrame * 0.3) * 3000; // REDUCED: gentle circular movement
+                // SIMPLE celebration: ONLY quick back-and-forth rotation (NO position movement)
+                const quickRotation = Math.sin(celebrationFrame * 1.2) * 0.6; // Faster rotation, larger angle
                 
-                // Get current position and add gentle celebration movements
-                const currentPos = lukeHeadEntity.position.getValue(viewer.clock.currentTime);
-                const cartographic = Cesium.Cartographic.fromCartesian(currentPos);
+                // NO position changes - Luke stays exactly where he is!
+                // Remove ALL vertical bouncing, horizontal dancing, and circular movement
                 
-                // Gentle multi-dimensional celebration
-                const celebrationHeight = 800000 + softBouncing; // Moderate height bouncing
-                const celebrationLng = cartographic.longitude + (subtleDance / 111000); // Subtle left/right
-                const celebrationLat = cartographic.latitude + (lightCircular / 111000); // Gentle circular
-                
-                // Update position with gentle 3D celebration
-                lukeHeadEntity.position = Cesium.Cartesian3.fromRadians(
-                    celebrationLng, celebrationLat, celebrationHeight
-                );
-                
+                // ONLY update rotation - keep Luke in same position
                 if (lukeHeadEntity.billboard) {
-                    lukeHeadEntity.billboard.rotation = gentleRocking; // Moderate head rocking
+                    lukeHeadEntity.billboard.rotation = quickRotation; // Quick back-and-forth tilting ONLY
                 }
                 
                 // Add celebration sparkles
@@ -3936,10 +3995,9 @@
                     
                     // FIXED: Force recreation of cluster markers after celebration
                     setTimeout(() => {
-                        if (clusterMarkers.length === 0 && sampleRoutes.length > 0) {
-                            console.log('🔄 Recreating cluster markers after celebration completion');
-                            createClusterMarkers();
-                        }
+                        console.log('🔄 FORCE checking marker recreation after celebration completion');
+                        console.log(`🔧 Celebration state: markers=${clusterMarkers.length}, routes=${sampleRoutes.length}, animating=${isAnimationInProgress}`);
+                        ensureMarkersExist(); // Use emergency restoration function
                     }, 500); // Short delay to ensure everything is settled
                 }
                 
