@@ -1889,17 +1889,20 @@
         }
         
         function createClusterMarkers() {
-            // Clear existing cluster markers safely
-            clusterMarkers.forEach(marker => {
-                try {
-                    if (viewer.entities.contains(marker)) {
-                        viewer.entities.remove(marker);
+            try {
+                // ROBUST: Clear existing cluster markers safely with better error handling
+                clusterMarkers.forEach(marker => {
+                    try {
+                        if (marker && viewer.entities.contains(marker)) {
+                            viewer.entities.remove(marker);
+                        }
+                    } catch (error) {
+                        console.warn('⚠️ Marker removal error (non-critical):', error.message);
                     }
-                } catch (error) {
-                    // Ignore removal errors
-                }
-            });
-            clusterMarkers = [];
+                });
+                clusterMarkers = [];
+                
+                console.log('🗺️ Creating cluster markers safely...');
             
             // Get current camera height to determine clustering
             const cameraHeight = viewer.camera.positionCartographic.height;
@@ -1938,6 +1941,13 @@
                 clusterMarker.cluster = cluster;
                 clusterMarkers.push(clusterMarker);
             });
+            
+            console.log(`✅ Successfully created ${clusterMarkers.length} cluster markers`);
+            
+            } catch (error) {
+                console.error('❌ createClusterMarkers failed:', error);
+                // Continue without crashing the app
+            }
         }
         
         function createClusterIcon(count) {
@@ -2213,21 +2223,33 @@
             }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
         }
         
-        // Generate hurricane-style unique colors for route differentiation
+        // Generate highly variable random colors for route differentiation
         function generateRouteColors(routeCount) {
             const colors = [];
+            const usedHues = new Set(); // Prevent similar colors
             
-            // Create a diverse color palette using HSL color space
+            // Create a diverse color palette with random distribution
             for (let i = 0; i < routeCount; i++) {
-                const hue = (i * 137.508) % 360; // Golden angle for good distribution
-                const saturation = 65 + (i % 3) * 15; // Vary saturation: 65%, 80%, 95%
-                const lightness = 45 + (i % 4) * 10;  // Vary lightness: 45%, 55%, 65%, 75%
+                let hue, attempts = 0;
+                
+                // Find a unique hue that's not too close to existing ones
+                do {
+                    hue = Math.random() * 360; // FULLY RANDOM hue across spectrum
+                    attempts++;
+                } while (attempts < 50 && Array.from(usedHues).some(usedHue => Math.abs(hue - usedHue) < 15));
+                
+                usedHues.add(hue);
+                
+                // High variability in saturation and lightness
+                const saturation = 60 + Math.random() * 40; // 60-100% (very vibrant)
+                const lightness = 35 + Math.random() * 30;  // 35-65% (good visibility range)
                 
                 // Convert HSL to RGB
                 const rgb = hslToRgb(hue / 360, saturation / 100, lightness / 100);
-                colors.push(Cesium.Color.fromBytes(rgb.r, rgb.g, rgb.b, 220)); // Slight transparency
+                colors.push(Cesium.Color.fromBytes(rgb.r, rgb.g, rgb.b, 200)); // Slight transparency for layering
             }
             
+            console.log(`🌈 Generated ${colors.length} highly variable random colors`);
             return colors;
         }
         
@@ -2280,12 +2302,13 @@
                     // Each route gets its own unique color
                     const uniqueColor = routeColors[index];
                     
+                    // Create route entity with persistent properties to prevent color changes
                     const routeEntity = viewer.entities.add({
                         polyline: {
                             positions: positions,
-                            width: 5, // Slightly thicker for better visibility
+                            width: 6, // Thicker for better visibility
                             material: new Cesium.PolylineGlowMaterialProperty({
-                                glowPower: 0.15,
+                                glowPower: 0.2,
                                 color: uniqueColor
                             }),
                             clampToGround: true
@@ -2293,6 +2316,10 @@
                         name: `Route-${index + 1}: ${route.name}`,
                         description: `${route.type} - ${route.distance}km - Color #${index + 1}`
                     });
+                    
+                    // CRITICAL: Store color to prevent changes
+                    routeEntity._originalColor = uniqueColor;
+                    routeEntity._colorLocked = true;
                     
                     // Mark as temporary for cleanup
                     routeEntity.isTemporary = true;
@@ -2306,12 +2333,31 @@
             // Show info overlay
             showRouteInfoOverlay(cluster.routes.length);
             
-            // Clear temporary routes after 15 seconds (longer for big clusters)
-            const displayDuration = Math.min(15000, Math.max(8000, cluster.routes.length * 50));
-            setTimeout(() => {
-                clearTemporaryRoutes();
-                hideRouteInfoOverlay();
+            // FIXED: Improved cleanup timing to prevent marker crashes
+            const displayDuration = Math.min(12000, Math.max(6000, cluster.routes.length * 30));
+            const cleanupTimeout = setTimeout(() => {
+                try {
+                    clearTemporaryRoutes();
+                    hideRouteInfoOverlay();
+                    
+                    // Safely recreate markers after cleanup
+                    setTimeout(() => {
+                        try {
+                            createClusterMarkers();
+                        } catch (error) {
+                            console.warn('⚠️ Marker recreation error (non-critical):', error.message);
+                        }
+                    }, 500);
+                } catch (error) {
+                    console.error('❌ Cleanup error:', error);
+                }
             }, displayDuration);
+            
+            // Store timeout for cleanup if needed
+            if (window.routeDisplayTimeout) {
+                clearTimeout(window.routeDisplayTimeout);
+            }
+            window.routeDisplayTimeout = cleanupTimeout;
             
             viewer.scene.requestRender();
         }
@@ -2374,17 +2420,41 @@
             showClusterRoutesWithDifferentiation(cluster);
         }
         
-        // Clear temporary route displays
+        // ROBUST: Clear temporary route displays with better error handling
         function clearTemporaryRoutes() {
-            const entitiesToRemove = [];
-            viewer.entities.values.forEach(entity => {
-                if (entity.isTemporary) {
-                    entitiesToRemove.push(entity);
-                }
-            });
-            
-            entitiesToRemove.forEach(entity => viewer.entities.remove(entity));
-            viewer.scene.requestRender();
+            try {
+                console.log('🧹 Cleaning up temporary routes...');
+                const entitiesToRemove = [];
+                
+                // Safely collect temporary entities
+                viewer.entities.values.forEach(entity => {
+                    try {
+                        if (entity && entity.isTemporary) {
+                            entitiesToRemove.push(entity);
+                        }
+                    } catch (error) {
+                        console.warn('⚠️ Entity check error (non-critical):', error.message);
+                    }
+                });
+                
+                console.log(`🧹 Removing ${entitiesToRemove.length} temporary routes...`);
+                
+                // Safely remove entities
+                entitiesToRemove.forEach(entity => {
+                    try {
+                        if (viewer.entities.contains(entity)) {
+                            viewer.entities.remove(entity);
+                        }
+                    } catch (error) {
+                        console.warn('⚠️ Entity removal error (non-critical):', error.message);
+                    }
+                });
+                
+                viewer.scene.requestRender();
+                console.log('✅ Temporary routes cleaned up successfully');
+            } catch (error) {
+                console.error('❌ clearTemporaryRoutes failed:', error);
+            }
         }
         
         // Display all routes permanently on the globe
@@ -3383,7 +3453,7 @@
         // Enhanced 45-second animation with head rotation and celebration dance
         function animateEpicJourneyEnhanced(distanceKm) {
             try {
-                console.log(`🚀 EPIC JOURNEY ANIMATION: ${distanceKm.toFixed(1)}km over 45 seconds`);
+                console.log(`🚀 EPIC JOURNEY ANIMATION: ${distanceKm.toFixed(1)}km over 25 seconds`);
                 
                 // Show the overlay
                 const overlay = document.getElementById('distanceOverlay');
@@ -3398,16 +3468,16 @@
                 const timesAroundWorld = distanceKm / earthCircumference;
                 const totalDegrees = (distanceKm / earthCircumference) * 360;
                 
-                // Calculate a reasonable display speed (45 seconds total)
-                const animationDurationSeconds = 45;
+                // FIXED: Faster 25-second animation
+                const animationDurationSeconds = 25;
                 const displaySpeedKmh = distanceKm / (animationDurationSeconds / 3600); // km/h
                 const displaySpeedMph = displaySpeedKmh * 0.621371; // mph
                 
                 console.log(`🌍 EPIC JOURNEY: ${distanceKm}km = ${timesAroundWorld.toFixed(2)}x around Earth`);
                 console.log(`🏃 Visual Speed: ${displaySpeedMph.toFixed(0)} mph (${displaySpeedKmh.toFixed(0)} km/h)`);
                 
-                // Setup 45-second animation (45 * 30 = 1350 frames at 30fps)
-                const maxFrames = 1350; // 45 seconds at 30fps
+                // Setup 25-second animation (25 * 30 = 750 frames at 30fps)
+                const maxFrames = 750; // 25 seconds at 30fps
                 const distanceStep = distanceKm / maxFrames;
                 const degreesStep = totalDegrees / maxFrames;
                 let frame = 0;
@@ -3524,10 +3594,10 @@
                         // Start celebration dance!
                         celebrateLukesEpicJourney(lukeHeadEntity, timesAroundWorld, distanceKm);
                         
-                        // Hide overlay after celebration
+                        // Hide overlay after celebration (adjusted for faster animation)
                         setTimeout(() => {
                             overlay.style.display = 'none';
-                        }, 8000); // Longer for celebration
+                        }, 6000); // Shorter for 25-second animation
                     }
                     
                 }, 33); // 30fps
@@ -3616,16 +3686,16 @@
                 if (totalDistance > 0) {
                     console.log(`🌍 Starting epic journey animation: ${totalDistance.toFixed(1)}km`);
                     
-                    // ALWAYS transition to optimal animation view - center Luke on screen
-                    console.log('📹 Transitioning to optimal animation positioning...');
+                    // FIXED: Proper perpendicular view of Earth at animation start point
+                    console.log('📹 Positioning camera perpendicular to Earth at Luke\'s start point...');
                     viewer.camera.flyTo({
-                        destination: Cesium.Cartesian3.fromDegrees(-120.0, 0.0, 20000000), // Center on equator at start point
+                        destination: Cesium.Cartesian3.fromDegrees(-120.0, 0.0, 15000000), // Perfect viewing distance
                         orientation: {
                             heading: 0.0,
-                            pitch: -Math.PI / 2.8, // ~65 degrees down for perfect Earth view  
+                            pitch: -Math.PI / 2, // FIXED: 90 degrees straight down (perpendicular to surface)
                             roll: 0.0
                         },
-                        duration: 2.0, // Slightly faster transition
+                        duration: 1.5, // Faster transition
                         complete: () => {
                             console.log('✨ Camera positioned perfectly for Luke\'s epic journey!');
                             // Start animation after positioning completes
