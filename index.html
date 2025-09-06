@@ -304,8 +304,15 @@
                 <div class="luke-head-upload" style="margin: 15px 0; text-align: center;">
                     <div style="font-weight: bold; color: #fbbf24; margin-bottom: 8px;">🧑 Luke's Head Upload</div>
                     <input type="file" id="lukeHeadUpload" accept="image/*" style="display: none;" />
-                    <button id="uploadLukeHeadBtn" class="filter-btn" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); font-size: 12px; width: 100%;">
+                    <button id="uploadLukeHeadBtn" class="filter-btn" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); font-size: 12px; width: 100%; margin-bottom: 5px;">
                         📷 Upload Luke's Face
+                    </button>
+                    <button id="useHardcodedBtn" class="filter-btn" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); font-size: 12px; width: 100%;">
+                        💼 Use Hard-coded Luke
+                    </button>
+                    <textarea id="hardcodeImageInput" placeholder="Paste base64 image data here..." style="width: 100%; height: 60px; margin-top: 5px; padding: 5px; border-radius: 5px; border: 1px solid #475569; background: #1e293b; color: white; font-size: 10px; resize: vertical;"></textarea>
+                    <button id="setHardcodedBtn" class="filter-btn" style="background: linear-gradient(135deg, #059669 0%, #047857 100%); font-size: 10px; width: 100%; margin-top: 3px;">
+                        Set Custom Image
                     </button>
                     <div id="lukeHeadPreview" style="margin-top: 8px; display: none;">
                         <img id="lukeHeadImg" style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid #f59e0b;" />
@@ -375,6 +382,24 @@
         let savedCameraPosition = null; // Save camera position before visualization
         let routeCache = null; // Cache for loaded routes
         let isLoadingAdditionalRoutes = false; // Track background loading
+        
+        // HARD-CODED LUKE'S HEAD IMAGE (replace this with Luke's actual photo)
+        const LUKES_HEAD_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='; // Placeholder - replace with actual image
+        
+        // Function to set Luke's head image programmatically
+        function setLukesHeadImage(base64String) {
+            const lukeHeadImg = document.getElementById('lukeHeadImg');
+            const lukeHeadPreview = document.getElementById('lukeHeadPreview');
+            const uploadBtn = document.getElementById('uploadLukeHeadBtn');
+            
+            if (lukeHeadImg && lukeHeadPreview && uploadBtn) {
+                lukeHeadImg.src = base64String;
+                lukeHeadPreview.style.display = 'block';
+                uploadBtn.textContent = '🎆 Luke\'s Face Ready!';
+                uploadBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+                console.log('🎆 Luke\'s head image set programmatically!');
+            }
+        }
         
         // Strava API Configuration
         const STRAVA_CONFIG = {
@@ -2078,38 +2103,31 @@
                     
                     console.log(`🌎 Line has ${positions.length} positions`);
                     
-                    if (positions.length > 1) {
-                        const lineEntity = viewer.entities.add({
-                            name: 'distance-line',
-                            polyline: {
-                                positions: positions,
-                                width: 12, // Thicker line
-                                material: color,
-                                clampToGround: false,
-                                show: true,
-                                outline: true,
-                                outlineColor: Cesium.Color.WHITE.withAlpha(0.5),
-                                outlineWidth: 3
-                            }
-                        });
-                        worldDistanceEntities.push(lineEntity);
-                        console.log(`✅ THICK distance line created with ${positions.length} positions at 800km altitude`);
-                    } else {
-                        console.error('❌ Not enough positions for line - check degree calculation');
+                    // 🎆 EPIC PROGRESSIVE ANIMATION WITH LUKE'S HEAD! 🎆
+                    console.log('🎆 Starting LEGENDARY progressive line + spinning earth + Luke head animation!');
+                    console.log(`🎆 Animation will cover ${totalDegrees.toFixed(1)} degrees (${positions.length} positions)`);
+                    
+                    // Skip static line creation - go straight to progressive animation!
+                    if (positions.length < 2 && totalDegrees > 0) {
+                        console.log('⚠️ Small distance detected, will create minimal animation');
+                        // For very small distances, ensure we have at least 2 positions
+                        positions.length = 0; // Clear the array
+                        positions.push(Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE, 0, 800000));
+                        positions.push(Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE + Math.max(totalDegrees, 5), 0, 800000));
+                        console.log(`✅ Created minimal positions for animation: ${positions.length}`);
+                    }
+                    
+                    if (totalDegrees <= 0) {
+                        console.error('❌ No distance to animate');
                         return;
                     }
                     
-                    // 🎆 EPIC PROGRESSIVE ANIMATION WITH LUKE'S HEAD! 🎆
-                    console.log('🎆 Starting LEGENDARY progressive line + spinning earth + Luke head animation!');
-                    
-                    // Remove the full static line - we'll draw it progressively!
-                    viewer.entities.remove(lineEntity);
-                    const lineIndex = worldDistanceEntities.indexOf(lineEntity);
-                    if (lineIndex > -1) worldDistanceEntities.splice(lineIndex, 1);
-                    
                     // Get Luke's uploaded image or use default
                     const lukeHeadImg = document.getElementById('lukeHeadImg');
-                    const hasCustomImage = lukeHeadImg && lukeHeadImg.src && !lukeHeadImg.src.includes('data:');
+                    const hasCustomImage = lukeHeadImg && lukeHeadImg.src && 
+                        (lukeHeadImg.src.startsWith('data:image/') || lukeHeadImg.src.startsWith('blob:'));
+                    
+                    console.log(`🖼️ Image check: hasCustomImage=${hasCustomImage}, src=${lukeHeadImg ? lukeHeadImg.src.substring(0, 50) : 'none'}...`);
                     
                     // Add Luke's head marker with uploaded image or emoji
                     const lukeHeadEntity = viewer.entities.add({
@@ -2563,6 +2581,33 @@
                         reader.readAsDataURL(file);
                     } else {
                         alert('Please select a valid image file!');
+                    }
+                });
+            }
+            
+            // Hard-coded image functionality
+            const useHardcodedBtn = document.getElementById('useHardcodedBtn');
+            const setHardcodedBtn = document.getElementById('setHardcodedBtn');
+            const hardcodeImageInput = document.getElementById('hardcodeImageInput');
+            
+            if (useHardcodedBtn) {
+                useHardcodedBtn.addEventListener('click', () => {
+                    if (LUKES_HEAD_IMAGE && LUKES_HEAD_IMAGE.length > 50) {
+                        setLukesHeadImage(LUKES_HEAD_IMAGE);
+                    } else {
+                        alert('No hard-coded image available. Use the textarea to add one!');
+                    }
+                });
+            }
+            
+            if (setHardcodedBtn && hardcodeImageInput) {
+                setHardcodedBtn.addEventListener('click', () => {
+                    const customImageData = hardcodeImageInput.value.trim();
+                    if (customImageData && customImageData.startsWith('data:image/')) {
+                        setLukesHeadImage(customImageData);
+                        alert('Custom image set! Luke is ready for animation!');
+                    } else {
+                        alert('Please paste a valid base64 image (starting with "data:image/")');
                     }
                 });
             }
