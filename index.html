@@ -382,13 +382,13 @@
         const LUKES_HEAD_HARDCODED = 'PASTE_LUKES_BASE64_DATA_HERE_INCLUDING_DATA_IMAGE_PREFIX';
         // 👆👆👆 PASTE LUKE'S BASE64 DATA ABOVE THIS LINE 👆👆👆
         
-        // METHOD 3: Local file reference (base64 data from luke.txt file)
+        // METHOD 3: Direct image file (BEST - just upload PNG/JPG to GitHub)
         // 👇 UPDATE THIS with your actual filename! 👇
-        const LUKES_HEAD_LOCAL = './luke.txt'; // Base64 data file
+        const LUKES_HEAD_LOCAL = './Luke\'s-face.png'; // Direct image file
         
         // Choose which method to use:
-        // 1=URL, 2=Base64, 3=Local file, 4=Base64 from file, 5=Hardcoded base64
-        const IMAGE_METHOD = 4; // Set to 4 to load base64 from separate file (GitHub compatible)
+        // 1=URL, 2=Base64, 3=Direct image file, 4=Base64 from file, 5=Hardcoded base64
+        const IMAGE_METHOD = 3; // Set to 3 to use direct image file (simplest and most reliable)
         const AUTO_LOAD_LUKES_FACE = true; // Automatically load Luke's face on startup
         
         function getLukesImage() {
