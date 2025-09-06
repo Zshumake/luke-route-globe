@@ -303,7 +303,7 @@
                 
                 <div class="luke-head-upload" style="margin: 15px 0; text-align: center;">
                     <div style="font-weight: bold; color: #fbbf24; margin-bottom: 8px;">🧑 Luke's Head Setup</div>
-                    <div style="font-size: 10px; color: #94a3b8; margin-bottom: 8px;">📷 Google Photos: Share photo → Copy link → Paste below</div>
+                    <div style="font-size: 10px; color: #94a3b8; margin-bottom: 8px;">📁 Local: Click "Use Local File" | 🗺️ Google: Share → Copy link → Paste</div>
                     <input type="file" id="lukeHeadUpload" accept="image/*" style="display: none;" />
                     <button id="uploadLukeHeadBtn" class="filter-btn" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); font-size: 12px; width: 100%; margin-bottom: 5px;">
                         📷 Upload Luke's Face
@@ -311,6 +311,9 @@
                     <input id="googlePhotosUrl" type="url" placeholder="Paste Google Photos link here..." style="width: 100%; padding: 8px; margin-bottom: 5px; border-radius: 5px; border: 1px solid #475569; background: #1e293b; color: white; font-size: 12px;" />
                     <button id="useGooglePhotosBtn" class="filter-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); font-size: 12px; width: 100%; margin-bottom: 5px;">
                         🗺️ Use Google Photos Link
+                    </button>
+                    <button id="useLocalFileBtn" class="filter-btn" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); font-size: 11px; width: 100%; margin-bottom: 3px;">
+                        📁 Use Local File (luke.jpg)
                     </button>
                     <button id="useHardcodedBtn" class="filter-btn" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); font-size: 11px; width: 100%; margin-bottom: 3px;">
                         💼 Use Code Method
@@ -399,11 +402,12 @@
         // METHOD 2: Base64 (paste converted image data here)
         const LUKES_HEAD_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='; // Replace with actual base64
         
-        // METHOD 3: Local file reference (put luke.jpg in same folder as this HTML file)
-        const LUKES_HEAD_LOCAL = './luke.jpg';
+        // METHOD 3: Local file reference (put Luke's photo in same folder as this HTML file)
+        // 👇 UPDATE THIS with your actual filename! 👇
+        const LUKES_HEAD_LOCAL = './luke.jpg'; // Change to match your file name (luke.png, luke.jpeg, etc.)
         
         // Choose which method to use (1=URL, 2=Base64, 3=Local file)
-        const IMAGE_METHOD = 3; // Change this number to switch methods
+        const IMAGE_METHOD = 3; // Set to 3 to use local file
         
         function getLukesImage() {
             switch(IMAGE_METHOD) {
@@ -2641,6 +2645,17 @@
                     } else {
                         alert('Please paste your Google Photos share link first!');
                     }
+                });
+            }
+            
+            // Local file functionality
+            const useLocalFileBtn = document.getElementById('useLocalFileBtn');
+            if (useLocalFileBtn) {
+                useLocalFileBtn.addEventListener('click', () => {
+                    console.log(`📁 Attempting to load local file: ${LUKES_HEAD_LOCAL}`);
+                    setLukesHeadImage(LUKES_HEAD_LOCAL);
+                    useLocalFileBtn.textContent = '✅ Local Luke Ready!';
+                    useLocalFileBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
                 });
             }
             
