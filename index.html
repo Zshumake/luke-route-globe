@@ -483,6 +483,7 @@
         let showAllRoutes = false; // Toggle for showing all routes
         let worldDistanceEntities = []; // For around-the-world distance visualization
         let worldDistanceAnimation = null; // Animation handle
+        let isAnimationInProgress = false; // CRITICAL: Prevent camera corrections during animations
         let savedCameraPosition = null; // Save camera position before visualization
         let routeCache = null; // Cache for loaded routes
         let isLoadingAdditionalRoutes = false; // Track background loading
@@ -2111,6 +2112,12 @@
             
             // FIXED: Universal Earth-centered zoom-out behavior
             viewer.camera.moveEnd.addEventListener(() => {
+                // CRITICAL: Don't interfere with animations!
+                if (isAnimationInProgress) {
+                    console.log('🎥 Animation in progress - skipping camera corrections');
+                    return;
+                }
+                
                 const currentPitch = viewer.camera.pitch;
                 const currentHeight = viewer.camera.positionCartographic.height;
                 const currentPosition = viewer.camera.positionCartographic;
@@ -3602,6 +3609,9 @@
                         // Hide overlay after celebration (adjusted for faster animation)
                         setTimeout(() => {
                             overlay.style.display = 'none';
+                            // CRITICAL: Re-enable camera corrections after animation ends
+                            isAnimationInProgress = false;
+                            console.log('✨ Animation completed - camera corrections re-enabled');
                         }, 6000); // Shorter for 25-second animation
                     }
                     
@@ -3677,6 +3687,10 @@
                     if (lukeHeadEntity.billboard) {
                         lukeHeadEntity.billboard.rotation = 0;
                     }
+                    
+                    // CRITICAL: Ensure animation flag is cleared
+                    isAnimationInProgress = false;
+                    console.log('✨ Celebration completed - camera corrections fully re-enabled');
                 }
                 
             }, 33); // 30fps celebration
@@ -3703,6 +3717,9 @@
                         duration: 1.5, // Faster transition
                         complete: () => {
                             console.log('✨ Camera positioned perfectly for Luke\'s epic journey!');
+                            // CRITICAL: Disable camera corrections during animation
+                            isAnimationInProgress = true;
+                            
                             // Start animation after positioning completes
                             setTimeout(() => {
                                 animateEpicJourneyEnhanced(totalDistance);
@@ -3722,6 +3739,12 @@
         // HELPER: Smart Earth-centered view that respects marker inspection mode
         function ensureEarthCenteredView() {
             try {
+                // CRITICAL: Never interfere with animations!
+                if (isAnimationInProgress) {
+                    console.log('🎥 Animation in progress - ensureEarthCenteredView disabled');
+                    return;
+                }
+                
                 const currentHeight = viewer.camera.positionCartographic.height;
                 const currentCartographic = viewer.camera.positionCartographic;
                 const currentPitch = viewer.camera.pitch;
