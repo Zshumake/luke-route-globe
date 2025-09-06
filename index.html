@@ -1820,12 +1820,22 @@
         }
         
         function createClusterMarkers() {
-            // Clear existing cluster markers
-            clusterMarkers.forEach(marker => viewer.entities.remove(marker));
+            // Clear existing cluster markers safely
+            clusterMarkers.forEach(marker => {
+                try {
+                    if (viewer.entities.contains(marker)) {
+                        viewer.entities.remove(marker);
+                    }
+                } catch (error) {
+                    // Ignore removal errors
+                }
+            });
             clusterMarkers = [];
             
             // Get current camera height to determine clustering
             const cameraHeight = viewer.camera.positionCartographic.height;
+            
+            console.log(`🔍 Creating cluster markers at height: ${(cameraHeight / 1000).toFixed(0)}km`);
             
             // Only show clusters when zoomed out (above 1M meters)
             if (cameraHeight < 1000000) {
@@ -1988,12 +1998,40 @@
         
         // Setup camera change listeners for clustering and click handlers
         function setupCameraListeners() {
+            let lastUpdateHeight = 0;
+            
             viewer.camera.changed.addEventListener(() => {
-                // Throttle cluster updates
-                clearTimeout(window.clusterUpdateTimeout);
-                window.clusterUpdateTimeout = setTimeout(() => {
-                    createClusterMarkers();
-                }, 500);
+                const currentHeight = viewer.camera.positionCartographic.height;
+                
+                // Only update markers if height changed significantly (prevents excessive updates)
+                if (Math.abs(currentHeight - lastUpdateHeight) > currentHeight * 0.1) {
+                    lastUpdateHeight = currentHeight;
+                    
+                    // Throttle cluster updates
+                    clearTimeout(window.clusterUpdateTimeout);
+                    window.clusterUpdateTimeout = setTimeout(() => {
+                        createClusterMarkers();
+                    }, 800); // Longer delay to reduce flicker
+                }
+            });
+            
+            // Add camera movement end listener for better angle enforcement
+            viewer.camera.moveEnd.addEventListener(() => {
+                const currentPitch = viewer.camera.pitch;
+                const currentHeight = viewer.camera.positionCartographic.height;
+                
+                // If camera is too flat (horizontal) when zoomed out, gently adjust it
+                if (currentHeight > 5000000 && currentPitch > -Math.PI/6) { // If higher than 5000km and flatter than 30°
+                    console.log('🎯 Adjusting camera angle for better view');
+                    viewer.camera.setView({
+                        destination: viewer.camera.position,
+                        orientation: {
+                            heading: viewer.camera.heading,
+                            pitch: Math.max(currentPitch, -Math.PI/4), // At least 45° down when far
+                            roll: 0.0
+                        }
+                    });
+                }
             });
             
             // Add click handler for cluster markers
@@ -2022,16 +2060,31 @@
                         const boundingSphere = Cesium.BoundingSphere.fromPoints(allPositions);
                         const distance = Math.max(boundingSphere.radius * 3, 10000); // More conservative distance
                         
-                        // Fly to show all routes in the cluster
+                        // Fly to show all routes in the cluster with proper downward angle
                         viewer.camera.flyToBoundingSphere(boundingSphere, {
                             duration: 2.5,
-                            offset: new Cesium.HeadingPitchRange(0, -0.5, distance),
+                            offset: new Cesium.HeadingPitchRange(0, -Math.PI/4, distance), // 45° looking down angle
                             complete: () => {
+                                // Ensure we maintain a good looking-down angle
+                                viewer.camera.setView({
+                                    destination: viewer.camera.position,
+                                    orientation: {
+                                        heading: viewer.camera.heading,
+                                        pitch: Math.max(viewer.camera.pitch, -Math.PI/3), // At least 60° down
+                                        roll: 0.0
+                                    }
+                                });
+                                
                                 viewer.scene.requestRender();
                                 console.log(`✅ Flew to cluster region with ${cluster.routes.length} routes`);
                                 
-                                // Show routes in this cluster temporarily
+                                // Show routes in this cluster temporarily  
                                 showClusterRoutes(cluster);
+                                
+                                // Recreate markers after a short delay to ensure they reappear
+                                setTimeout(() => {
+                                    createClusterMarkers();
+                                }, 1000);
                             }
                         });
                     }
