@@ -2541,9 +2541,15 @@
                     // Get Luke's uploaded image or use default
                     const lukeHeadImg = document.getElementById('lukeHeadImg');
                     const hasCustomImage = lukeHeadImg && lukeHeadImg.src && 
-                        (lukeHeadImg.src.startsWith('data:image/') || lukeHeadImg.src.startsWith('blob:'));
+                        (lukeHeadImg.src.startsWith('data:image/') || 
+                         lukeHeadImg.src.startsWith('blob:') ||
+                         lukeHeadImg.src.includes('Luke') || 
+                         lukeHeadImg.src.includes('luke') ||
+                         lukeHeadImg.src.endsWith('.png') ||
+                         lukeHeadImg.src.endsWith('.jpg'));
                     
                     console.log(`🖼️ Image check: hasCustomImage=${hasCustomImage}, src=${lukeHeadImg ? lukeHeadImg.src.substring(0, 50) : 'none'}...`);
+                    console.log(`🖼️ Full image URL: ${lukeHeadImg ? lukeHeadImg.src : 'none'}`);
                     
                     // Add Luke's head marker with uploaded image or emoji
                     const lukeHeadEntity = viewer.entities.add({
