@@ -377,12 +377,18 @@
         // METHOD 2: Base64 (paste converted image data here)
         const LUKES_HEAD_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='; // Replace with actual base64
         
+        // 🎯 METHOD 5: HARDCODED BASE64 - PASTE LUKE'S BASE64 DATA HERE! 🎯
+        // 👇👇👇 REPLACE THE PLACEHOLDER BELOW WITH LUKE'S ACTUAL BASE64 DATA 👇👇👇
+        const LUKES_HEAD_HARDCODED = 'PASTE_LUKES_BASE64_DATA_HERE_INCLUDING_DATA_IMAGE_PREFIX';
+        // 👆👆👆 PASTE LUKE'S BASE64 DATA ABOVE THIS LINE 👆👆👆
+        
         // METHOD 3: Local file reference (base64 data from luke.txt file)
         // 👇 UPDATE THIS with your actual filename! 👇
         const LUKES_HEAD_LOCAL = './luke.txt'; // Base64 data file
         
-        // Choose which method to use (1=URL, 2=Base64, 3=Local file, 4=Base64 from file)
-        const IMAGE_METHOD = 4; // Set to 4 to load base64 from luke.txt file
+        // Choose which method to use:
+        // 1=URL, 2=Base64, 3=Local file, 4=Base64 from file, 5=Hardcoded base64
+        const IMAGE_METHOD = 5; // Set to 5 to use hardcoded base64 data (line 382)
         const AUTO_LOAD_LUKES_FACE = true; // Automatically load Luke's face on startup
         
         function getLukesImage() {
@@ -391,6 +397,7 @@
                 case 2: return LUKES_HEAD_BASE64;
                 case 3: return LUKES_HEAD_LOCAL;
                 case 4: return null; // Will be loaded async
+                case 5: return LUKES_HEAD_HARDCODED; // Hardcoded base64
                 default: return LUKES_HEAD_BASE64;
             }
         }
@@ -1532,10 +1539,15 @@
                         console.log('📷 Using Luke\'s image from file:', lukesImage.substring(0, 50) + '...');
                         setLukesHeadImage(lukesImage);
                     } else {
-                        // Use synchronous method
+                        // Use synchronous method (1, 2, 3, 5)
                         const lukesImage = getLukesImage();
-                        console.log('📷 Using Luke\'s image:', lukesImage.substring(0, 50) + '...');
-                        setLukesHeadImage(lukesImage);
+                        if (lukesImage === 'PASTE_LUKES_BASE64_DATA_HERE_INCLUDING_DATA_IMAGE_PREFIX') {
+                            console.log('⚠️ Hardcoded base64 placeholder detected - Luke\'s face not pasted yet');
+                            console.log('📋 To add Luke\'s face, paste base64 data on line 382');
+                        } else {
+                            console.log('📷 Using Luke\'s image:', lukesImage.substring(0, 50) + '...');
+                            setLukesHeadImage(lukesImage);
+                        }
                     }
                 }
                 
