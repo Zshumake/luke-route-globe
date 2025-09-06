@@ -1843,22 +1843,15 @@
                 
                 const clusterMarker = viewer.entities.add({
                     name: `${cluster.routes.length} routes in ${cluster.city}`,
-                    position: Cesium.Cartesian3.fromDegrees(cluster.centerLng, cluster.centerLat, 1000),
+                    position: Cesium.Cartesian3.fromDegrees(cluster.centerLng, cluster.centerLat, 500), // Lower height for better grounding
                     billboard: {
                         image: createClusterIcon(cluster.routes.length),
-                        scale: 0.8,
-                        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
-                    },
-                    label: {
-                        text: cluster.routes.length.toString(),
-                        font: '14pt bold monospace',
-                        fillColor: Cesium.Color.WHITE,
-                        outlineColor: Cesium.Color.BLACK,
-                        outlineWidth: 2,
-                        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                        pixelOffset: new Cesium.Cartesian2(0, -20),
-                        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                        scale: 1.0, // Full size for better visibility
+                        verticalOrigin: Cesium.VerticalOrigin.CENTER, // Center for better balance
+                        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                        disableDepthTestDistance: 100000, // Always visible when close
+                        scaleByDistance: new Cesium.NearFarScalar(1000, 1.2, 20000000, 0.3), // Professional scaling
+                        translucencyByDistance: new Cesium.NearFarScalar(1000, 1.0, 15000000, 0.6) // Fade with distance
                     }
                 });
                 
@@ -1869,22 +1862,94 @@
         }
         
         function createClusterIcon(count) {
-            // Create a canvas for the cluster marker icon
+            // Create a high-DPI canvas for crisp rendering
             const canvas = document.createElement('canvas');
-            canvas.width = 40;
-            canvas.height = 40;
+            const size = Math.max(50, Math.min(count * 3 + 40, 80)); // Dynamic sizing
+            canvas.width = size;
+            canvas.height = size;
             const ctx = canvas.getContext('2d');
             
-            // Draw circle background (Airbnb style)
-            ctx.fillStyle = count > 10 ? '#ef4444' : count > 5 ? '#f97316' : '#3b82f6';
+            // Enable high-DPI rendering
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = size * dpr;
+            canvas.height = size * dpr;
+            canvas.style.width = size + 'px';
+            canvas.style.height = size + 'px';
+            ctx.scale(dpr, dpr);
+            
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const radius = size / 2 - 4;
+            
+            // Professional color scheme based on count
+            let bgColor, borderColor, textColor;
+            if (count > 20) {
+                bgColor = '#dc2626';      // Red for high density
+                borderColor = '#fecaca';
+                textColor = '#ffffff';
+            } else if (count > 10) {
+                bgColor = '#ea580c';      // Orange for medium density  
+                borderColor = '#fed7aa';
+                textColor = '#ffffff';
+            } else if (count > 5) {
+                bgColor = '#2563eb';      // Blue for moderate density
+                borderColor = '#bfdbfe';
+                textColor = '#ffffff';
+            } else {
+                bgColor = '#059669';      // Green for low density
+                borderColor = '#a7f3d0';
+                textColor = '#ffffff';
+            }
+            
+            // Draw shadow (modern depth effect)
             ctx.beginPath();
-            ctx.arc(20, 20, 18, 0, 2 * Math.PI);
+            ctx.arc(centerX + 1, centerY + 2, radius, 0, 2 * Math.PI);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
             ctx.fill();
             
-            // Add white border
+            // Draw main circle with gradient
+            const gradient = ctx.createRadialGradient(centerX - radius/3, centerY - radius/3, 0, centerX, centerY, radius);
+            gradient.addColorStop(0, bgColor);
+            gradient.addColorStop(1, bgColor + 'dd'); // Slightly darker edge
+            
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            
+            // Draw elegant border
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 2.5;
             ctx.stroke();
+            
+            // Add inner highlight ring
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius - 3, 0, 2 * Math.PI);
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            // Draw number with professional typography
+            ctx.fillStyle = textColor;
+            ctx.font = `bold ${Math.max(12, Math.min(size * 0.35, 24))}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Add subtle text shadow for better readability
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+            ctx.shadowBlur = 1;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 1;
+            
+            ctx.fillText(count.toString(), centerX, centerY);
+            
+            // Reset shadow
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
             
             return canvas;
         }
