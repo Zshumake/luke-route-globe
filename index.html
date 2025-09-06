@@ -1111,7 +1111,6 @@
                         // Quick activity validation (no detailed logging)
                         const validActivities = activities.filter(a => a.name && a.distance > 0).length;
                         if (page === 1) console.log(`🚀 Page ${page}: ${validActivities}/${activities.length} valid activities`);
-                        }
                         
                         if (activities.length === 0) {
                             hasMorePages = false;
