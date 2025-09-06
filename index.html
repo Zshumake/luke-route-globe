@@ -2363,6 +2363,12 @@
         
         // Hurricane-style route differentiation - each route gets unique color
         function showClusterRoutesWithDifferentiation(cluster) {
+            // Clear any existing auto-cleanup timeout
+            if (window.routeDisplayTimeout) {
+                clearTimeout(window.routeDisplayTimeout);
+                console.log('🗟️ Cleared previous route cleanup timeout');
+            }
+            
             // Remove any existing temporary route displays
             clearTemporaryRoutes();
             
@@ -2384,12 +2390,11 @@
                     const routeEntity = viewer.entities.add({
                         polyline: {
                             positions: positions,
-                            width: 6, // Thicker for better visibility
-                            material: new Cesium.PolylineGlowMaterialProperty({
-                                glowPower: 0.2,
-                                color: uniqueColor
-                            }),
-                            clampToGround: true
+                            width: 8, // Even thicker for better color visibility
+                            material: uniqueColor, // FIXED: Use direct color instead of glow to prevent white line
+                            clampToGround: true,
+                            outline: false, // CRITICAL: Disable outline that causes white line
+                            extrudedHeight: 0 // Ensure no extrusion
                         },
                         name: `Route-${index + 1}: ${route.name}`,
                         description: `${route.type} - ${route.distance}km - Color #${index + 1}`
@@ -2411,10 +2416,13 @@
             // Show info overlay
             showRouteInfoOverlay(cluster.routes.length);
             
-            // FIXED: Improved cleanup timing to prevent marker crashes
-            const displayDuration = Math.min(12000, Math.max(6000, cluster.routes.length * 30));
+            // ENHANCED: Much longer display duration - routes should persist until user clicks elsewhere
+            const displayDuration = Math.min(60000, Math.max(30000, cluster.routes.length * 100)); // 30-60 seconds instead of 6-12
+            console.log(`🕰️ Routes will display for ${(displayDuration/1000).toFixed(1)} seconds`);
+            
             const cleanupTimeout = setTimeout(() => {
                 try {
+                    console.log('🗑️ Auto-cleaning routes after extended display time...');
                     clearTemporaryRoutes();
                     hideRouteInfoOverlay();
                     
@@ -2490,7 +2498,7 @@
                     Different routes in the same area are now clearly distinguishable!
                 </div>
                 <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px; color: #9ca3af;">
-                    Routes auto-hide in ${Math.min(15, Math.max(8, routeCount * 0.05))} seconds
+                    ✨ Routes persist until you click another marker or wait ${Math.min(60, Math.max(30, routeCount * 0.1))} seconds
                 </div>
             `;
             
