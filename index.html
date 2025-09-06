@@ -2058,13 +2058,16 @@
                 const now = Date.now();
                 
                 // THROTTLE: Prevent rapid successive calls that cause marker disappearance
+                // CRITICAL: Check throttling BEFORE clearing existing markers!
                 if (now - lastMarkerCreation < MARKER_THROTTLE_MS) {
                     console.log(`⏱️ THROTTLED: createClusterMarkers skipped (last created ${now - lastMarkerCreation}ms ago)`);
                     return;
                 }
-                lastMarkerCreation = now;
                 
                 console.log(`🔧 DEBUG: createClusterMarkers called - current markers: ${clusterMarkers.length}, routes: ${sampleRoutes.length}, animation in progress: ${isAnimationInProgress}`);
+                
+                // CRITICAL: Only update timestamp AFTER we're sure we'll complete the recreation
+                lastMarkerCreation = now;
                 
                 // ROBUST: Clear existing cluster markers safely with better error handling
                 clusterMarkers.forEach(marker => {
