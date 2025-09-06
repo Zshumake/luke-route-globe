@@ -1628,12 +1628,8 @@
                     // If camera is getting too far from Earth, constrain it
                     if (cameraHeight > 25000000 || distanceToEarth > 35000000) {
                         console.log('🎯 Preventing camera drift - constraining zoom');
-                        viewer.camera.setView({
-                            destination: Cesium.Cartesian3.fromDegrees(
-                                viewer.camera.positionCartographic.longitude * 180 / Math.PI,
-                                viewer.camera.positionCartographic.latitude * 180 / Math.PI,
-                                Math.min(cameraHeight, 20000000)
-                            ),
+                        // FIXED: Use Earth-centered view helper
+                        ensureEarthCenteredView();
                             orientation: {
                                 heading: viewer.camera.heading,
                                 pitch: Math.max(viewer.camera.pitch, -Math.PI/2), // Keep looking down at Earth
@@ -1662,12 +1658,8 @@
                     const afterHeight = viewer.camera.positionCartographic.height;
                     if (afterHeight > 25000000) {
                         // Prevent the zoom if it would go too high
-                        viewer.camera.setView({
-                            destination: Cesium.Cartesian3.fromDegrees(
-                                viewer.camera.positionCartographic.longitude * 180 / Math.PI,
-                                viewer.camera.positionCartographic.latitude * 180 / Math.PI,
-                                Math.min(beforeHeight * 1.2, 20000000) // Allow some zoom but limit it
-                            ),
+                        // FIXED: Use Earth-centered view helper
+                        ensureEarthCenteredView();
                             orientation: viewer.camera.getOrientation()
                         });
                     }
@@ -1710,12 +1702,12 @@
                             console.log(`⚠️ - Dot product: ${dotProduct.toFixed(3)}`);
                             console.log(`⚠️ - Camera height: ${(cameraHeight/1000).toFixed(0)}km`);
                             
-                            // Reset to a safe viewing position
+                            // FIXED: Reset to proper perpendicular Earth view
                             camera.setView({
                                 destination: Cesium.Cartesian3.fromDegrees(0, 30, Math.max(lastValidCameraHeight, 5000000)),
                                 orientation: {
                                     heading: 0.0,
-                                    pitch: -Cesium.Math.PI_OVER_TWO * 0.5,
+                                    pitch: -Math.PI / 2, // FIXED: Full 90° down instead of 45°
                                     roll: 0.0
                                 }
                             });
@@ -1739,12 +1731,12 @@
                     console.log('Anisotropic filtering enabled for better satellite imagery');
                 }
                 
-                // Set initial view
+                // FIXED: Set initial view with proper perpendicular angle
                 viewer.camera.setView({
                     destination: Cesium.Cartesian3.fromDegrees(-98.5795, 39.8283, 15000000.0),
                     orientation: {
                         heading: 0.0,
-                        pitch: -1.57,
+                        pitch: -Math.PI / 2, // FIXED: 90° straight down instead of -1.57
                         roll: 0.0
                     }
                 });
@@ -3714,20 +3706,49 @@
             }
         }
         
+        // HELPER: Ensure Earth is always centered and viewed perpendicularly
+        function ensureEarthCenteredView() {
+            try {
+                const currentHeight = viewer.camera.positionCartographic.height;
+                const currentCartographic = viewer.camera.positionCartographic;
+                
+                // If camera is looking too parallel or at wrong angle, fix it
+                if (viewer.camera.pitch > -Math.PI/4 || currentHeight > 20000000) {
+                    console.log('🎯 Ensuring Earth-centered perpendicular view...');
+                    
+                    viewer.camera.flyTo({
+                        destination: Cesium.Cartesian3.fromRadians(
+                            currentCartographic.longitude,
+                            currentCartographic.latitude, 
+                            Math.min(currentHeight, 15000000) // Limit max height
+                        ),
+                        orientation: {
+                            heading: 0.0,
+                            pitch: -Math.PI / 2, // Always perpendicular to Earth
+                            roll: 0.0
+                        },
+                        duration: 1.0
+                    });
+                }
+            } catch (error) {
+                console.warn('⚠️ ensureEarthCenteredView warning:', error.message);
+            }
+        }
+        
         // EMERGENCY RESTORE FUNCTION
         function restoreEarth() {
             try {
-                console.log('🌍 EMERGENCY RESTORE: Attempting to restore Earth...');
+                console.log('🌍 EMERGENCY RESTORE: Restoring Earth with perpendicular view...');
                 
                 // Clear any problematic animations/entities
                 clearWorldDistanceVisualization();
                 
-                // Reset camera to safe position
+                // FIXED: Reset camera to proper perpendicular Earth view
                 viewer.camera.setView({
                     destination: Cesium.Cartesian3.fromDegrees(-98.5795, 39.8283, 15000000.0),
                     orientation: {
                         heading: 0.0,
-                        pitch: -1.2,
+                        pitch: -Math.PI / 2, // FIXED: 90° straight down (perpendicular to Earth)
                         roll: 0.0
                     }
                 });
@@ -3830,6 +3851,9 @@
                     // Update route visibility on map and in sidebar
                     updatePermanentRouteVisibility();
                     populateRoutesList();
+                    
+                    // FIXED: Ensure camera stays centered on Earth after route updates
+                    ensureEarthCenteredView();
                     
                     console.log(`🏠 Zwift routes ${showZwiftRoutes ? 'SHOWN' : 'HIDDEN'} - Button updated`);
                     
