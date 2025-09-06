@@ -2369,8 +2369,10 @@
                 console.log('🗟️ Cleared previous route cleanup timeout');
             }
             
-            // Remove any existing temporary route displays
+            // CRITICAL: Clear any existing temporary route displays before showing new ones
+            console.log('🗑️ Clearing previous routes before showing new cluster...');
             clearTemporaryRoutes();
+            hideRouteInfoOverlay(); // Also hide previous info overlay
             
             console.log(`🌀 HURRICANE-STYLE: Showing ${cluster.routes.length} routes with unique colors`);
             
@@ -2416,45 +2418,13 @@
             // Show info overlay
             showRouteInfoOverlay(cluster.routes.length);
             
-            // ENHANCED: Much longer display duration - routes should persist until user clicks elsewhere
-            const displayDuration = Math.min(60000, Math.max(30000, cluster.routes.length * 100)); // 30-60 seconds instead of 6-12
-            console.log(`🕰️ Routes will display for ${(displayDuration/1000).toFixed(1)} seconds`);
+            console.log('✨ Routes will persist until you click a different marker (no auto-timeout)');
             
-            const cleanupTimeout = setTimeout(() => {
-                try {
-                    console.log('🗑️ Auto-cleaning routes after extended display time...');
-                    clearTemporaryRoutes();
-                    hideRouteInfoOverlay();
-                    
-                    // ENHANCED: More robust marker recreation after cleanup
-                    setTimeout(() => {
-                        try {
-                            console.log('🔄 Recreating markers after route cleanup...');
-                            createClusterMarkers();
-                            
-                            // Backup recreation if first attempt fails
-                            setTimeout(() => {
-                                const currentMarkerCount = clusterMarkers.length;
-                                console.log(`📊 Current marker count: ${currentMarkerCount}`);
-                                if (currentMarkerCount === 0) {
-                                    console.log('🚫 No markers found - attempting backup recreation...');
-                                    createClusterMarkers();
-                                }
-                            }, 1000);
-                        } catch (error) {
-                            console.error('❌ Marker recreation failed:', error);
-                        }
-                    }, 600); // Faster initial recreation
-                } catch (error) {
-                    console.error('❌ Cleanup error:', error);
-                }
-            }, displayDuration);
-            
-            // Store timeout for cleanup if needed
-            if (window.routeDisplayTimeout) {
-                clearTimeout(window.routeDisplayTimeout);
-            }
-            window.routeDisplayTimeout = cleanupTimeout;
+            // REMOVED: No automatic cleanup timeout - routes persist until user action!
+            // Routes will only be cleared when:
+            // 1. User clicks a different cluster marker (clearTemporaryRoutes called at start of this function)
+            // 2. User manually clears them via button
+            // 3. User refreshes page
             
             viewer.scene.requestRender();
         }
@@ -2498,7 +2468,7 @@
                     Different routes in the same area are now clearly distinguishable!
                 </div>
                 <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px; color: #9ca3af;">
-                    ✨ Routes persist until you click another marker or wait ${Math.min(60, Math.max(30, routeCount * 0.1))} seconds
+                    ✨ Routes persist until you click a different marker - no auto-timeout!
                 </div>
             `;
             
