@@ -1941,8 +1941,15 @@
             
             console.log(`🔍 Creating cluster markers at height: ${(cameraHeight / 1000).toFixed(0)}km`);
             
-            // Only show clusters when zoomed out (above 1M meters)
-            if (cameraHeight < 1000000) {
+            // ENHANCED: Be more generous with marker creation to prevent permanent loss
+            if (cameraHeight < 800000) { // Reduced threshold from 1M to 800K
+                console.log('🔍 Camera too close for clusters - markers hidden but not destroyed');
+                return;
+            }
+            
+            // Safety check: ensure we have routes to cluster
+            if (!sampleRoutes || sampleRoutes.length === 0) {
+                console.warn('⚠️ No routes available for clustering');
                 return;
             }
             
@@ -1975,6 +1982,21 @@
             });
             
             console.log(`✅ Successfully created ${clusterMarkers.length} cluster markers`);
+            
+            // RECOVERY: Set up periodic marker health check
+            if (!window.markerHealthCheck) {
+                window.markerHealthCheck = setInterval(() => {
+                    if (!isAnimationInProgress) { // Don't interfere with animations
+                        const currentHeight = viewer.camera.positionCartographic.height;
+                        
+                        // If we should have markers but don't, recreate them
+                        if (currentHeight > 1000000 && clusterMarkers.length === 0 && sampleRoutes.length > 0) {
+                            console.log('🚑 MARKER RECOVERY: No markers found when they should exist - recreating...');
+                            createClusterMarkers();
+                        }
+                    }
+                }, 5000); // Check every 5 seconds
+            }
             
             } catch (error) {
                 console.error('❌ createClusterMarkers failed:', error);
@@ -2263,10 +2285,15 @@
                                 // Show routes in this cluster temporarily  
                                 showClusterRoutes(cluster);
                                 
-                                // Recreate markers after a short delay to ensure they reappear
+                                // FIXED: More aggressive marker recreation system
                                 setTimeout(() => {
-                                    createClusterMarkers();
-                                }, 1000);
+                                    try {
+                                        console.log('🔄 Recreating cluster markers after route display...');
+                                        createClusterMarkers();
+                                    } catch (error) {
+                                        console.warn('⚠️ Marker recreation error (non-critical):', error.message);
+                                    }
+                                }, 800); // Slightly faster recreation
                             }
                         });
                     }
@@ -2391,14 +2418,25 @@
                     clearTemporaryRoutes();
                     hideRouteInfoOverlay();
                     
-                    // Safely recreate markers after cleanup
+                    // ENHANCED: More robust marker recreation after cleanup
                     setTimeout(() => {
                         try {
+                            console.log('🔄 Recreating markers after route cleanup...');
                             createClusterMarkers();
+                            
+                            // Backup recreation if first attempt fails
+                            setTimeout(() => {
+                                const currentMarkerCount = clusterMarkers.length;
+                                console.log(`📊 Current marker count: ${currentMarkerCount}`);
+                                if (currentMarkerCount === 0) {
+                                    console.log('🚫 No markers found - attempting backup recreation...');
+                                    createClusterMarkers();
+                                }
+                            }, 1000);
                         } catch (error) {
-                            console.warn('⚠️ Marker recreation error (non-critical):', error.message);
+                            console.error('❌ Marker recreation failed:', error);
                         }
-                    }, 500);
+                    }, 600); // Faster initial recreation
                 } catch (error) {
                     console.error('❌ Cleanup error:', error);
                 }
