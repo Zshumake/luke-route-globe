@@ -2109,42 +2109,55 @@
                 }
             });
             
-            // Add camera movement end listener for better angle enforcement
+            // FIXED: Universal Earth-centered zoom-out behavior
             viewer.camera.moveEnd.addEventListener(() => {
                 const currentPitch = viewer.camera.pitch;
                 const currentHeight = viewer.camera.positionCartographic.height;
+                const currentPosition = viewer.camera.positionCartographic;
                 
-                // Progressive camera angle adjustment based on height - ENHANCED for zoom-out stability
+                // CRITICAL: Determine if we're in "close marker view" mode
+                const isCloseMarkerView = currentHeight < 1000000 && currentPitch > -Math.PI/3; // Less than 1M meters AND not looking straight down
+                
+                if (isCloseMarkerView) {
+                    // Allow angled views for close marker inspection
+                    console.log('🔍 Close marker view: Allowing angled camera');
+                    return;
+                }
+                
+                // For ALL other cases: enforce Earth-centered perpendicular view
+                let needsCorrection = false;
                 let targetPitch = currentPitch;
                 
-                if (currentHeight > 20000000) {
-                    // Very high altitude: force steep downward angle (80° down) - prevent horizon drift
-                    targetPitch = -Math.PI * 0.44; // ~80° down
-                    console.log('🎯 High altitude: Preventing horizon drift with steep downward view');
-                } else if (currentHeight > 10000000) {
-                    // High altitude: moderately steep (65° down)  
-                    targetPitch = -Math.PI * 0.36; // ~65° down
-                    console.log('🎯 Medium altitude: Maintaining stable downward view');
-                } else if (currentHeight > 5000000) {
-                    // Medium altitude: ensure at least 50° down (more aggressive than before)
-                    targetPitch = Math.min(currentPitch, -Math.PI * 0.28); // At least 50° down
-                    console.log('🎯 Medium altitude: Enforcing stable viewing angle');
+                if (currentHeight > 3000000) {
+                    // High altitude: ALWAYS perpendicular to Earth (90° straight down)
+                    targetPitch = -Math.PI / 2;
+                    needsCorrection = Math.abs(targetPitch - currentPitch) > 0.1; // 6 degree tolerance
+                    if (needsCorrection) {
+                        console.log('🎯 High altitude: Enforcing perpendicular Earth view');
+                    }
                 } else if (currentHeight > 1000000) {
-                    // Lower-medium altitude: ensure at least 35° down
-                    targetPitch = Math.min(currentPitch, -Math.PI/5); // At least 35° down
-                } 
-                // Below 1M height: allow more freedom for detailed views
+                    // Medium altitude: Ensure steep downward angle (at least 70° down)
+                    targetPitch = Math.min(currentPitch, -Math.PI * 0.39); // At least 70° down
+                    needsCorrection = currentPitch > -Math.PI * 0.39;
+                    if (needsCorrection) {
+                        console.log('🎯 Medium altitude: Enforcing steep Earth view');
+                    }
+                }
                 
-                // Apply the adjustment if needed with smooth transition
-                if (Math.abs(targetPitch - currentPitch) > 0.05) { // 3 degree threshold
+                // Apply correction with smooth transition
+                if (needsCorrection) {
                     viewer.camera.flyTo({
-                        destination: viewer.camera.position,
+                        destination: Cesium.Cartesian3.fromRadians(
+                            currentPosition.longitude,
+                            currentPosition.latitude,
+                            currentHeight
+                        ),
                         orientation: {
-                            heading: viewer.camera.heading,
+                            heading: 0.0, // Always face north for consistency
                             pitch: targetPitch,
                             roll: 0.0
                         },
-                        duration: 0.5,
+                        duration: 0.8,
                         convert: false
                     });
                 }
@@ -3706,28 +3719,36 @@
             }
         }
         
-        // HELPER: Ensure Earth is always centered and viewed perpendicularly
+        // HELPER: Smart Earth-centered view that respects marker inspection mode
         function ensureEarthCenteredView() {
             try {
                 const currentHeight = viewer.camera.positionCartographic.height;
                 const currentCartographic = viewer.camera.positionCartographic;
+                const currentPitch = viewer.camera.pitch;
                 
-                // If camera is looking too parallel or at wrong angle, fix it
-                if (viewer.camera.pitch > -Math.PI/4 || currentHeight > 20000000) {
+                // Don't interfere with close marker inspection
+                const isCloseMarkerView = currentHeight < 1000000 && currentPitch > -Math.PI/3;
+                if (isCloseMarkerView) {
+                    console.log('🔍 Respecting close marker view - no camera correction');
+                    return;
+                }
+                
+                // For zoom-out scenarios: enforce Earth-centered perpendicular view
+                if (currentPitch > -Math.PI/4 || currentHeight > 20000000) {
                     console.log('🎯 Ensuring Earth-centered perpendicular view...');
                     
                     viewer.camera.flyTo({
                         destination: Cesium.Cartesian3.fromRadians(
                             currentCartographic.longitude,
                             currentCartographic.latitude, 
-                            Math.min(currentHeight, 15000000) // Limit max height
+                            Math.min(currentHeight, 18000000) // Reasonable max height
                         ),
                         orientation: {
                             heading: 0.0,
                             pitch: -Math.PI / 2, // Always perpendicular to Earth
                             roll: 0.0
                         },
-                        duration: 1.0
+                        duration: 1.2
                     });
                 }
             } catch (error) {
@@ -3851,9 +3872,6 @@
                     // Update route visibility on map and in sidebar
                     updatePermanentRouteVisibility();
                     populateRoutesList();
-                    
-                    // FIXED: Ensure camera stays centered on Earth after route updates
-                    ensureEarthCenteredView();
                     
                     console.log(`🏠 Zwift routes ${showZwiftRoutes ? 'SHOWN' : 'HIDDEN'} - Button updated`);
                     
