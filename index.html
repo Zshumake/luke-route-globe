@@ -1835,8 +1835,8 @@
                     
                     // RAPID CORRECTION for trackpad zoom-outs
                     if (currentHeight > 18000000 || currentPitch > -Math.PI/6) {
-                        // Throttle corrections to prevent fighting with user
-                        if (now - lastConstraintTime > 500) { // Max once per 500ms
+                        // Throttle corrections to prevent fighting with user AND avoid marker recreation conflicts
+                        if (now - lastConstraintTime > 1500) { // Increased to 1.5 seconds to avoid marker conflicts
                             console.log('🚑 EMERGENCY: Rapid trackpad correction needed');
                             ensureEarthCenteredView();
                             lastConstraintTime = now;
@@ -2049,8 +2049,21 @@
             return clusters;
         }
         
+        // THROTTLING: Prevent rapid marker recreation that causes disappearing markers
+        let lastMarkerCreation = 0;
+        const MARKER_THROTTLE_MS = 1000; // Minimum 1 second between recreations
+
         function createClusterMarkers() {
             try {
+                const now = Date.now();
+                
+                // THROTTLE: Prevent rapid successive calls that cause marker disappearance
+                if (now - lastMarkerCreation < MARKER_THROTTLE_MS) {
+                    console.log(`⏱️ THROTTLED: createClusterMarkers skipped (last created ${now - lastMarkerCreation}ms ago)`);
+                    return;
+                }
+                lastMarkerCreation = now;
+                
                 console.log(`🔧 DEBUG: createClusterMarkers called - current markers: ${clusterMarkers.length}, routes: ${sampleRoutes.length}, animation in progress: ${isAnimationInProgress}`);
                 
                 // ROBUST: Clear existing cluster markers safely with better error handling
@@ -2303,15 +2316,21 @@
             viewer.camera.changed.addEventListener(() => {
                 const currentHeight = viewer.camera.positionCartographic.height;
                 
-                // Only update markers if height changed significantly (prevents excessive updates)
-                if (Math.abs(currentHeight - lastUpdateHeight) > currentHeight * 0.1) {
+                // Only update markers if height changed significantly AND not during animation
+                if (Math.abs(currentHeight - lastUpdateHeight) > currentHeight * 0.1 && !isAnimationInProgress) {
                     lastUpdateHeight = currentHeight;
                     
-                    // Throttle cluster updates
+                    // Throttle cluster updates more aggressively to prevent marker disappearance
                     clearTimeout(window.clusterUpdateTimeout);
                     window.clusterUpdateTimeout = setTimeout(() => {
-                        createClusterMarkers();
-                    }, 800); // Longer delay to reduce flicker
+                        // Double-check: Only recreate markers if we're not in a rapid interaction phase
+                        const now = Date.now();
+                        if (now - lastMarkerCreation >= MARKER_THROTTLE_MS) {
+                            createClusterMarkers();
+                        } else {
+                            console.log(`⏱️ Camera listener: Skipped marker recreation (too recent: ${now - lastMarkerCreation}ms ago)`);
+                        }
+                    }, 1200); // Increased delay to reduce conflicts with button interactions
                 }
             });
             
@@ -3745,9 +3764,17 @@
             console.log(`🔧 Emergency check: ${clusterMarkers.length} markers exist, ${visibleRoutes.length} routes should be visible (${sampleRoutes.length} total, showZwiftRoutes: ${showZwiftRoutes})`);
             
             if (clusterMarkers.length === 0 && visibleRoutes.length > 0 && !isAnimationInProgress) {
-                console.log('🚨 EMERGENCY RECREATION: Markers missing - forcing recreation now!');
-                createClusterMarkers();
-                return true; // Recreated
+                // EMERGENCY: Respect throttling even in emergency situations to prevent infinite loops
+                const now = Date.now();
+                if (now - lastMarkerCreation >= MARKER_THROTTLE_MS) {
+                    console.log('🚨 EMERGENCY RECREATION: Markers missing - forcing recreation now!');
+                    createClusterMarkers();
+                    return true; // Recreated
+                } else {
+                    console.log(`⏳ EMERGENCY DEFERRED: Markers missing but too recent (${now - lastMarkerCreation}ms ago) - will retry`);
+                    setTimeout(ensureMarkersExist, MARKER_THROTTLE_MS - (now - lastMarkerCreation)); // Retry after throttle period
+                    return false; // Deferred
+                }
             } else if (isAnimationInProgress) {
                 console.log('⏳ Animation in progress - will check markers again later');
                 setTimeout(ensureMarkersExist, 1000); // Check again in 1 second
@@ -3939,43 +3966,18 @@
             const celebrationDance = setInterval(() => {
                 celebrationFrame++;
                 
-                // SIMPLE celebration: ONLY quick back-and-forth rotation (NO position movement)
-                const quickRotation = Math.sin(celebrationFrame * 1.2) * 0.6; // Faster rotation, larger angle
+                // SHARP celebration: Quick left-right-left-right head shaking (like dancing)
+                // Create sharp transitions instead of smooth sine wave
+                const shakeSpeed = celebrationFrame * 0.4; // How fast the head shakes
+                const shakeDirection = Math.floor(shakeSpeed) % 2; // 0 or 1 (left or right)
+                const quickHeadShake = shakeDirection === 0 ? -0.4 : 0.4; // Sharp left (-) or right (+) tilt
                 
-                // NO position changes - Luke stays exactly where he is!
-                // Remove ALL vertical bouncing, horizontal dancing, and circular movement
-                
-                // ONLY update rotation - keep Luke in same position
+                // Luke stays in EXACT same position - only head rotation changes
                 if (lukeHeadEntity.billboard) {
-                    lukeHeadEntity.billboard.rotation = quickRotation; // Quick back-and-forth tilting ONLY
+                    lukeHeadEntity.billboard.rotation = quickHeadShake; // Sharp left/right head shake only
                 }
                 
-                // Add celebration sparkles
-                if (celebrationFrame % 5 === 0) {
-                    try {
-                        const sparkle = viewer.entities.add({
-                            position: Cesium.Cartesian3.fromRadians(
-                                cartographic.longitude + (Math.random() - 0.5) * 0.02,
-                                cartographic.latitude + (Math.random() - 0.5) * 0.02,
-                                newHeight + (Math.random() - 0.5) * 200000
-                            ),
-                            point: {
-                                pixelSize: 12,
-                                color: [Cesium.Color.GOLD, Cesium.Color.ORANGE, Cesium.Color.RED, 
-                                       Cesium.Color.PURPLE, Cesium.Color.LIME][celebrationFrame % 5],
-                                outlineColor: Cesium.Color.WHITE,
-                                outlineWidth: 3
-                            }
-                        });
-                        worldDistanceEntities.push(sparkle);
-                        
-                        setTimeout(() => {
-                            if (viewer.entities.contains(sparkle)) {
-                                viewer.entities.remove(sparkle);
-                            }
-                        }, 2000);
-                    } catch (e) { /* ignore sparkle errors */ }
-                }
+                // Celebration sparkles removed - Luke stays in exact same position
                 
                 viewer.scene.requestRender();
                 
