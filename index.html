@@ -3071,9 +3071,16 @@
                 overlay.style.display = 'block';
                 
                 // Calculate animation parameters
-                const earthCircumference = 40075; // km at equator
-                const totalDegrees = Math.min((distanceKm / earthCircumference) * 360, 360);
-                const timesAroundWorld = distanceKm / earthCircumference;
+                const earthCircumference = 40075; // km at equator (full Earth circumference)
+                const routeLatitude = 40.0; // US latitude for visual appeal
+                const latitudeCircumference = earthCircumference * Math.cos(routeLatitude * Math.PI / 180); // ~30,710 km
+                
+                // Use full Earth circumference for distance calculation, but travel at US latitude
+                const totalDegrees = (distanceKm / earthCircumference) * 360; // Can be > 360 for multiple laps
+                const lapsAroundLatitude = distanceKm / latitudeCircumference; // How many times around the US latitude
+                const timesAroundWorld = distanceKm / earthCircumference; // True times around equatorial Earth
+                
+                console.log(`🌍 Distance calc: ${distanceKm}km = ${lapsAroundLatitude.toFixed(2)} laps at 40°N = ${timesAroundWorld.toFixed(2)}x equatorial Earth`);
                 
                 // Setup animation variables
                 let currentDistance = 0;
@@ -3088,13 +3095,24 @@
                 const hasCustomImage = lukeHeadImg && lukeHeadImg.src && 
                     (lukeHeadImg.src.includes('Luke') || lukeHeadImg.src.includes('.png'));
                 
-                // Create line and Luke's head
-                const ROUTE_LATITUDE = 40.0;
-                const EQUATOR_START_LONGITUDE = -120.0;
+                // Create line and Luke's head  
+                const START_LONGITUDE = -120.0; // Start over US West Coast
                 let progressiveLinePositions = [];
                 
+                // Initialize the progressive line (empty at start)
+                const progressiveLine = viewer.entities.add({
+                    polyline: {
+                        positions: progressiveLinePositions,
+                        width: 12,
+                        material: Cesium.Color.PURPLE.withAlpha(0.9),
+                        show: true,
+                        clampToGround: false
+                    }
+                });
+                worldDistanceEntities.push(progressiveLine);
+                
                 const lukeHeadEntity = viewer.entities.add({
-                    position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE, ROUTE_LATITUDE, 800000),
+                    position: Cesium.Cartesian3.fromDegrees(START_LONGITUDE, routeLatitude, 800000),
                     billboard: hasCustomImage ? {
                         image: lukeHeadImg.src,
                         width: 80,
@@ -3118,26 +3136,50 @@
                     counter.textContent = `${currentDistance.toFixed(0)} km`;
                     progress.textContent = `${(currentDistance / distanceKm * 100).toFixed(0)}% complete • ${timesAroundWorld.toFixed(2)}x around world`;
                     
-                    // Update line
-                    const wrappedEndLng = ((EQUATOR_START_LONGITUDE + currentDegrees + 180) % 360) - 180;
-                    progressiveLinePositions.push(Cesium.Cartesian3.fromDegrees(wrappedEndLng, ROUTE_LATITUDE, 800000));
+                    // Calculate current position (can wrap around multiple times for long distances)
+                    const currentLongitude = START_LONGITUDE + (currentDegrees % 360);
+                    const wrappedLng = ((currentLongitude + 180) % 360) - 180;
                     
-                    if (window.currentProgressiveLine) {
-                        window.currentProgressiveLine.polyline.positions = progressiveLinePositions;
-                    } else {
-                        window.currentProgressiveLine = viewer.entities.add({
-                            polyline: {
-                                positions: progressiveLinePositions,
-                                width: 12,
-                                material: Cesium.Color.PURPLE.withAlpha(0.9),
-                                show: true
-                            }
-                        });
-                        worldDistanceEntities.push(window.currentProgressiveLine);
+                    // Add new point to the growing line
+                    const newPosition = Cesium.Cartesian3.fromDegrees(wrappedLng, routeLatitude, 800000);
+                    progressiveLinePositions.push(newPosition);
+                    
+                    // Update the progressive line with new positions
+                    progressiveLine.polyline.positions = new Cesium.CallbackProperty(() => {
+                        return progressiveLinePositions;
+                    }, false);
+                    
+                    // Move Luke's head to current position
+                    lukeHeadEntity.position = newPosition;
+                    
+                    // Add some sparkle effects every few frames
+                    if (frame % 10 === 0 && frame > 10) {
+                        try {
+                            const sparkle = viewer.entities.add({
+                                position: Cesium.Cartesian3.fromDegrees(
+                                    wrappedLng + (Math.random() - 0.5) * 2, 
+                                    routeLatitude + (Math.random() - 0.5) * 2, 
+                                    800000 + Math.random() * 200000
+                                ),
+                                point: {
+                                    pixelSize: 8,
+                                    color: Cesium.Color.YELLOW.withAlpha(0.8),
+                                    outlineColor: Cesium.Color.WHITE,
+                                    outlineWidth: 2
+                                }
+                            });
+                            worldDistanceEntities.push(sparkle);
+                            
+                            // Remove sparkle after short time
+                            setTimeout(() => {
+                                if (viewer.entities.contains(sparkle)) {
+                                    viewer.entities.remove(sparkle);
+                                }
+                            }, 1000);
+                        } catch (sparkleError) {
+                            // Ignore sparkle errors
+                        }
                     }
-                    
-                    // Move Luke's head
-                    lukeHeadEntity.position = Cesium.Cartesian3.fromDegrees(wrappedEndLng, ROUTE_LATITUDE, 800000);
                     
                     viewer.scene.requestRender();
                     
