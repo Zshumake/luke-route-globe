@@ -388,7 +388,7 @@
         
         // Choose which method to use:
         // 1=URL, 2=Base64, 3=Local file, 4=Base64 from file, 5=Hardcoded base64
-        const IMAGE_METHOD = 5; // Set to 5 to use hardcoded base64 data (line 382)
+        const IMAGE_METHOD = 4; // Set to 4 to load base64 from separate file (GitHub compatible)
         const AUTO_LOAD_LUKES_FACE = true; // Automatically load Luke's face on startup
         
         function getLukesImage() {
@@ -405,11 +405,40 @@
         // Async function to load Luke's image from base64 file
         async function loadLukesImageFromFile() {
             try {
-                console.log('📄 Loading Luke\'s face from luke.txt file...');
-                const response = await fetch('./luke.txt');
-                if (!response.ok) {
-                    throw new Error(`Failed to load luke.txt: ${response.status}`);
+                console.log('📄 Loading Luke\'s face from base64 file...');
+                
+                // Try multiple sources for loading the base64 file:
+                const fileSources = [
+                    './luke.txt',  // Local file (when running locally)
+                    './Luke.txt',  // Alternative capitalization
+                    // GitHub raw content URLs (work from anywhere including GitHub Pages)
+                    'https://raw.githubusercontent.com/Zshumake/luke-route-globe/main/luke.txt',
+                    'https://raw.githubusercontent.com/Zshumake/luke-route-globe/main/Luke.txt'
+                ];
+                
+                let response;
+                let successfulUrl = '';
+                
+                // Try each source until one works
+                for (const url of fileSources) {
+                    try {
+                        console.log(`🔍 Trying to load from: ${url}`);
+                        response = await fetch(url);
+                        if (response.ok) {
+                            successfulUrl = url;
+                            console.log(`✅ Successfully connected to: ${url}`);
+                            break;
+                        }
+                    } catch (fetchError) {
+                        console.log(`⚠️ Failed to load from ${url}: ${fetchError.message}`);
+                        continue;
+                    }
                 }
+                
+                if (!response || !response.ok) {
+                    throw new Error(`Failed to load from all sources`);
+                }
+                
                 const base64Data = await response.text();
                 // Clean up the base64 data (remove any whitespace/newlines)
                 const cleanBase64 = base64Data.trim();
@@ -419,10 +448,10 @@
                     ? cleanBase64 
                     : `data:image/png;base64,${cleanBase64}`;
                     
-                console.log('✅ Successfully loaded Luke\'s face from file');
+                console.log(`✅ Successfully loaded Luke\'s face from: ${successfulUrl}`);
                 return imageSource;
             } catch (error) {
-                console.error('❌ Failed to load Luke\'s face from file:', error);
+                console.error('❌ Failed to load Luke\'s face from all sources:', error);
                 console.log('🔄 Falling back to default base64 data...');
                 return LUKES_HEAD_BASE64;
             }
