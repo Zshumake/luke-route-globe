@@ -383,8 +383,16 @@
         // 👆👆👆 PASTE LUKE'S BASE64 DATA ABOVE THIS LINE 👆👆👆
         
         // METHOD 3: Direct image file (BEST - just upload PNG/JPG to GitHub)
-        // 👇 UPDATE THIS with your actual filename! 👇
-        const LUKES_HEAD_LOCAL = './Luke\'s-face.png'; // Direct image file
+        // 👇 Multiple filename variations to try 👇
+        const LUKES_HEAD_FILENAMES = [
+            './Luke\'s-face.png',     // Current filename (hyphen)
+            './Lukes-face.png',      // No apostrophe
+            './lukes-face.png',      // Lowercase
+            './Luke-face.png',       // No apostrophe, capital L
+            './Luke\'s face.png',    // Original with space
+            './Luke.png'             // Simple filename
+        ];
+        const LUKES_HEAD_LOCAL = LUKES_HEAD_FILENAMES[0]; // Default to first option
         
         // Choose which method to use:
         // 1=URL, 2=Base64, 3=Direct image file, 4=Base64 from file, 5=Hardcoded base64
@@ -400,6 +408,38 @@
                 case 5: return LUKES_HEAD_HARDCODED; // Hardcoded base64
                 default: return LUKES_HEAD_BASE64;
             }
+        }
+
+        // Function to try multiple filename variations
+        async function findWorkingImageFile() {
+            console.log('🔍 Trying multiple filename variations for Luke\'s face...');
+            
+            for (let i = 0; i < LUKES_HEAD_FILENAMES.length; i++) {
+                const filename = LUKES_HEAD_FILENAMES[i];
+                try {
+                    console.log(`🔍 Testing filename ${i + 1}/${LUKES_HEAD_FILENAMES.length}: ${filename}`);
+                    
+                    // Test if file exists by creating an image element
+                    const testImg = new Image();
+                    const imageLoaded = await new Promise((resolve) => {
+                        testImg.onload = () => resolve(true);
+                        testImg.onerror = () => resolve(false);
+                        testImg.src = filename;
+                    });
+                    
+                    if (imageLoaded) {
+                        console.log(`✅ Found working image file: ${filename}`);
+                        return filename;
+                    } else {
+                        console.log(`❌ Failed to load: ${filename}`);
+                    }
+                } catch (error) {
+                    console.log(`❌ Error testing ${filename}:`, error.message);
+                }
+            }
+            
+            console.log('❌ No working image files found, using default');
+            return LUKES_HEAD_LOCAL;
         }
 
         // Async function to load Luke's image from base64 file
@@ -459,16 +499,37 @@
         
         // Function to set Luke's head image programmatically
         function setLukesHeadImage(imageSource) {
+            console.log('🔧 DEBUG: setLukesHeadImage called with:', imageSource);
             const lukeHeadImg = document.getElementById('lukeHeadImg');
             const lukeHeadPreview = document.getElementById('lukeHeadPreview');
             const uploadBtn = document.getElementById('uploadLukeHeadBtn');
             
+            console.log('🔧 DEBUG: DOM elements found:', {
+                lukeHeadImg: !!lukeHeadImg,
+                lukeHeadPreview: !!lukeHeadPreview,
+                uploadBtn: !!uploadBtn
+            });
+            
             if (lukeHeadImg && lukeHeadPreview && uploadBtn) {
-                lukeHeadImg.src = imageSource;
-                lukeHeadPreview.style.display = 'block';
-                uploadBtn.textContent = '🎆 Luke\'s Face Ready!';
-                uploadBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-                console.log(`🎆 Luke\'s head image set: ${imageSource.substring(0, 50)}...`);
+                // Test if image loads successfully
+                const testImg = new Image();
+                testImg.onload = () => {
+                    console.log('✅ Image loaded successfully:', imageSource);
+                    lukeHeadImg.src = imageSource;
+                    lukeHeadPreview.style.display = 'block';
+                    uploadBtn.textContent = '🎆 Luke\'s Face Ready!';
+                    uploadBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+                    console.log(`🎆 Luke\'s head image set successfully`);
+                };
+                testImg.onerror = () => {
+                    console.error('❌ Failed to load image:', imageSource);
+                    console.log('🔄 Trying fallback methods...');
+                    // Try direct assignment anyway
+                    lukeHeadImg.src = imageSource;
+                };
+                testImg.src = imageSource;
+            } else {
+                console.error('❌ Missing DOM elements for Luke\'s head setup');
             }
         }
         
@@ -1567,14 +1628,20 @@
                         const lukesImage = await loadLukesImageFromFile();
                         console.log('📷 Using Luke\'s image from file:', lukesImage.substring(0, 50) + '...');
                         setLukesHeadImage(lukesImage);
+                    } else if (IMAGE_METHOD === 3) {
+                        // METHOD 3: Try multiple filename variations
+                        console.log('🔍 METHOD 3: Finding correct image filename...');
+                        const workingImageFile = await findWorkingImageFile();
+                        console.log('📷 Using Luke\'s image file:', workingImageFile);
+                        setLukesHeadImage(workingImageFile);
                     } else {
-                        // Use synchronous method (1, 2, 3, 5)
+                        // Use other synchronous methods (1, 2, 5)
                         const lukesImage = getLukesImage();
                         if (lukesImage === 'PASTE_LUKES_BASE64_DATA_HERE_INCLUDING_DATA_IMAGE_PREFIX') {
                             console.log('⚠️ Hardcoded base64 placeholder detected - Luke\'s face not pasted yet');
                             console.log('📋 To add Luke\'s face, paste base64 data on line 382');
                         } else {
-                            console.log('📷 Using Luke\'s image:', lukesImage.substring(0, 50) + '...');
+                            console.log('📷 Using Luke\'s image:', lukesImage);
                             setLukesHeadImage(lukesImage);
                         }
                     }
