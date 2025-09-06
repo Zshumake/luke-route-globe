@@ -1610,7 +1610,7 @@
                 const controller = scene.screenSpaceCameraController;
                 controller.enableCollisionDetection = false; // Performance improvement
                 controller.minimumZoomDistance = 0.5; // Allow very close zoom
-                controller.maximumZoomDistance = 30000000.0; // Reduced max zoom to prevent drift
+                controller.maximumZoomDistance = 20000000.0; // STRICTER: Further reduced max zoom
                 
                 // AGGRESSIVE camera drift prevention
                 controller.enableTilt = true;
@@ -1634,35 +1634,89 @@
                     }
                 });
                 
-                // ADDITIONAL: Prevent extreme zoom out with scroll wheel
+                // ADDITIONAL: Prevent extreme zoom out with scroll wheel and trackpad
                 controller.zoomEventTypes = [
                     Cesium.CameraEventType.WHEEL,
                     Cesium.CameraEventType.PINCH
                 ];
                 
-                // Override the default zoom behavior to add constraints
+                // MAC TRACKPAD SPECIFIC: Add gesture event monitoring
+                const canvas = viewer.canvas;
+                canvas.addEventListener('wheel', (event) => {
+                    // Detect rapid Mac trackpad zoom-out gestures
+                    if (Math.abs(event.deltaY) > 10) { // Large delta indicates rapid gesture
+                        const currentHeight = viewer.camera.positionCartographic.height;
+                        if (currentHeight > 12000000) {
+                            console.log('🚫 BLOCKING rapid Mac trackpad zoom-out');
+                            event.preventDefault();
+                            event.stopPropagation();
+                            
+                            // Immediate correction
+                            setTimeout(() => {
+                                ensureEarthCenteredView();
+                            }, 10);
+                        }
+                    }
+                }, { passive: false });
+                
+                // AGGRESSIVE: Override zoom behavior with Mac trackpad protection
                 const originalZoom = controller._zoom3D;
                 controller._zoom3D = function(startPosition, movement) {
-                    // Get current camera height before zoom
+                    // Get current camera height and position before zoom
                     const beforeHeight = viewer.camera.positionCartographic.height;
+                    const beforePitch = viewer.camera.pitch;
                     
-                    // Call original zoom function
+                    // CRITICAL: Block zoom if already too high or at wrong angle
+                    if (beforeHeight > 15000000) {
+                        console.log('🚫 BLOCKING rapid zoom - height limit reached');
+                        ensureEarthCenteredView();
+                        return; // Block the zoom entirely
+                    }
+                    
+                    // Allow zoom but monitor result
                     const result = originalZoom.call(this, startPosition, movement);
                     
-                    // Check camera height after zoom and constrain if needed
+                    // IMMEDIATE constraint check after zoom
                     const afterHeight = viewer.camera.positionCartographic.height;
-                    if (afterHeight > 25000000) {
-                        // Prevent the zoom if it would go too high
-                        // FIXED: Use Earth-centered view helper
-                        ensureEarthCenteredView();
+                    const afterPitch = viewer.camera.pitch;
+                    
+                    // If zoom caused problems, immediately correct
+                    if (afterHeight > 18000000 || afterPitch > -Math.PI/4) {
+                        console.log('🚫 CORRECTING problematic zoom result');
+                        setTimeout(() => {
+                            ensureEarthCenteredView();
+                        }, 1); // Immediate correction
                     }
                     
                     return result;
                 };
                 
-                // Set up continuous camera monitoring to prevent drift
+                // ENHANCED: High-frequency monitoring for Mac trackpad gestures
                 let lastValidCameraHeight = 15000000;
                 const earthRadius = 6371000; // Earth radius in meters
+                let lastConstraintTime = 0;
+                
+                // Add real-time camera monitoring (higher frequency for trackpad)
+                const monitorCamera = () => {
+                    if (isAnimationInProgress) return; // Don't interfere with animations
+                    
+                    const now = Date.now();
+                    const currentHeight = viewer.camera.positionCartographic.height;
+                    const currentPitch = viewer.camera.pitch;
+                    
+                    // RAPID CORRECTION for trackpad zoom-outs
+                    if (currentHeight > 18000000 || currentPitch > -Math.PI/6) {
+                        // Throttle corrections to prevent fighting with user
+                        if (now - lastConstraintTime > 500) { // Max once per 500ms
+                            console.log('🚑 EMERGENCY: Rapid trackpad correction needed');
+                            ensureEarthCenteredView();
+                            lastConstraintTime = now;
+                        }
+                    }
+                    
+                    requestAnimationFrame(monitorCamera);
+                };
+                monitorCamera(); // Start real-time monitoring
                 
                 setInterval(() => {
                     try {
@@ -1695,13 +1749,8 @@
                             console.log(`⚠️ - Dot product: ${dotProduct.toFixed(3)}`);
                             console.log(`⚠️ - Camera height: ${(cameraHeight/1000).toFixed(0)}km`);
                             
-                            // FIXED: Reset to proper perpendicular Earth view
-                            camera.setView({
-                                destination: Cesium.Cartesian3.fromDegrees(0, 30, Math.max(lastValidCameraHeight, 5000000)),
-                                orientation: {
-                                    heading: 0.0,
-                                    pitch: -Math.PI / 2, // FIXED: Full 90° down instead of 45°
-                                    roll: 0.0
+                            // FIXED: Use Earth-centered view helper for consistency
+                            ensureEarthCenteredView();
                                 }
                             });
                             
