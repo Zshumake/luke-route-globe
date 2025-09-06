@@ -275,8 +275,11 @@
                 </div>
                 
                 <div class="toggle-routes" style="margin: 10px 0; text-align: center;">
-                    <button id="toggleRoutesBtn" class="filter-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); width: 100%;">
+                    <button id="toggleRoutesBtn" class="filter-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); width: 100%; margin-bottom: 5px;">
                         🌍 Show All Routes on Globe
+                    </button>
+                    <button id="toggleZwiftBtn" class="filter-btn" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); width: 100%; font-size: 12px;">
+                        🏠 Hide Zwift Routes (Indoor)
                     </button>
                 </div>
                 
@@ -355,6 +358,7 @@
         let routeEntities = [];
         let permanentRouteEntities = []; // For always-visible routes
         let currentFilter = 'all';
+        let showZwiftRoutes = false; // Hide Zwift routes by default
         let sampleRoutes = [];
         let clusterMarkers = [];
         let currentZoomLevel = 0;
@@ -375,7 +379,7 @@
         
         // METHOD 3: Local file reference (put Luke's photo in same folder as this HTML file)
         // 👇 UPDATE THIS with your actual filename! 👇
-        const LUKES_HEAD_LOCAL = './luke\'s face.png'; // Updated to match Luke's actual filename
+        const LUKES_HEAD_LOCAL = './Luke\'s face.png'; // Fixed to match exact filename (capital L, curly apostrophe)
         
         // Choose which method to use (1=URL, 2=Base64, 3=Local file)
         const IMAGE_METHOD = 3; // Set to 3 to use local file
@@ -1820,13 +1824,17 @@
             viewer.scene.requestRender();
         }
         
-        // Update visibility of permanent routes based on current filter
+        // Update visibility of permanent routes based on current filter and Zwift toggle
         function updatePermanentRouteVisibility() {
             if (!showAllRoutes) return;
             
             permanentRouteEntities.forEach(entity => {
                 if (entity.route) {
-                    const shouldShow = currentFilter === 'all' || entity.route.type === currentFilter;
+                    const matchesFilter = currentFilter === 'all' || entity.route.type === currentFilter;
+                    const isZwiftRoute = entity.route.name && (entity.route.name.toLowerCase().includes('zwift') || 
+                                                               entity.route.name.toLowerCase().includes('watopia') ||
+                                                               entity.route.name.toLowerCase().includes('makuri'));
+                    const shouldShow = matchesFilter && (!isZwiftRoute || showZwiftRoutes);
                     entity.polyline.show = shouldShow;
                 }
             });
@@ -1851,7 +1859,11 @@
             routesList.innerHTML = '';
             
             const filteredRoutes = sampleRoutes.filter(route => {
-                return currentFilter === 'all' || route.type === currentFilter;
+                const matchesFilter = currentFilter === 'all' || route.type === currentFilter;
+                const isZwiftRoute = route.name && (route.name.toLowerCase().includes('zwift') || 
+                                                   route.name.toLowerCase().includes('watopia') ||
+                                                   route.name.toLowerCase().includes('makuri'));
+                return matchesFilter && (!isZwiftRoute || showZwiftRoutes);
             });
 
             filteredRoutes.forEach(route => {
@@ -2073,6 +2085,7 @@
         // AROUND-THE-WORLD DISTANCE VISUALIZATION
         const EARTH_CIRCUMFERENCE_KM = 40075.017; // Earth's circumference at equator in km
         const EQUATOR_START_LONGITUDE = -98.0; // Starting point in middle America (Kansas area)
+        const ROUTE_LATITUDE = 40.0; // Draw line across US latitude (not equator)
         
         // Calculate total distances for different activity types
         function calculateTotalDistances() {
@@ -2154,6 +2167,7 @@
                     });
                     window.lukePopupBoxes = [];
                     window.lastPopupFrame = 0;
+                    window.usedPopupMessages = []; // Reset unique message tracker
                 }
                 
                 // Remove all world distance entities safely
@@ -2278,7 +2292,7 @@
                     for (let lng = 0; lng <= maxDegrees; lng += stepSize) {
                         const currentLng = EQUATOR_START_LONGITUDE + lng;
                         const wrappedLng = ((currentLng + 180) % 360) - 180; // Proper longitude wrapping
-                        positions.push(Cesium.Cartesian3.fromDegrees(wrappedLng, 0, 800000)); // Much higher altitude for visibility
+                        positions.push(Cesium.Cartesian3.fromDegrees(wrappedLng, ROUTE_LATITUDE, 800000)); // US latitude for visibility
                     }
                     
                     console.log(`🌎 Line has ${positions.length} positions`);
@@ -2292,8 +2306,8 @@
                         console.log('⚠️ Small distance detected, will create minimal animation');
                         // For very small distances, ensure we have at least 2 positions
                         positions.length = 0; // Clear the array
-                        positions.push(Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE, 0, 800000));
-                        positions.push(Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE + Math.max(totalDegrees, 5), 0, 800000));
+                        positions.push(Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE, ROUTE_LATITUDE, 800000));
+                        positions.push(Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE + Math.max(totalDegrees, 5), ROUTE_LATITUDE, 800000));
                         console.log(`✅ Created minimal positions for animation: ${positions.length}`);
                     }
                     
@@ -2311,7 +2325,7 @@
                     
                     // Add Luke's head marker with uploaded image or emoji
                     const lukeHeadEntity = viewer.entities.add({
-                        position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE, 0, 800000),
+                        position: Cesium.Cartesian3.fromDegrees(EQUATOR_START_LONGITUDE, ROUTE_LATITUDE, 800000),
                         billboard: hasCustomImage ? {
                             image: lukeHeadImg.src,
                             width: 80,
@@ -2372,7 +2386,7 @@
                             const wrappedEndLng = ((currentEndLng + 180) % 360) - 180;
                             
                             // Add new position to growing line
-                            progressiveLinePositions.push(Cesium.Cartesian3.fromDegrees(wrappedEndLng, 0, 800000));
+                            progressiveLinePositions.push(Cesium.Cartesian3.fromDegrees(wrappedEndLng, ROUTE_LATITUDE, 800000));
                             
                             // Update existing line positions instead of removing/re-adding (fixes flashing)
                             if (!window.currentProgressiveLine && progressiveLinePositions.length > 1) {
@@ -2394,7 +2408,7 @@
                             }
                             
                             // 2. MOVE LUKE'S HEAD along the line
-                            lukeHeadEntity.position = Cesium.Cartesian3.fromDegrees(wrappedEndLng, 0, 800000);
+                            lukeHeadEntity.position = Cesium.Cartesian3.fromDegrees(wrappedEndLng, ROUTE_LATITUDE, 800000);
                             
                             // 3. NO CAMERA MOVEMENT - prevents world shaking (user can manually follow Luke)
                             
@@ -2424,22 +2438,43 @@
                                 const offsetLat = lukeCartographic.latitude + Math.sin(offsetAngle) * offsetDistance;
                                 const offsetHeight = 800000 + (Math.random() - 0.5) * 200000; // Vary height slightly
                                 
-                                // Pick random fun message based on activity type
-                                const popupMessages = activityType === 'Cycling Distance' ? [
+                                // Pick UNIQUE fun messages (no repeats!)
+                                const allPopupMessages = activityType === 'Cycling Distance' ? [
                                     '🚴‍♂️💨 ZOOM!', '🔥 PEDAL POWER!', '⚡ LIGHTNING FAST!', '🚀 ROCKET LUKE!', 
                                     '💪 BEAST MODE!', '👑 CYCLING KING!', '🌟 SUPERSTAR!', '🎯 UNSTOPPABLE!',
-                                    '🏆 LEGEND!', '💥 BOOM!', '🎆 AMAZING!', '🌪️ TORNADO!'
+                                    '🏆 LEGEND!', '💥 BOOM!', '🎆 AMAZING!', '🌪️ TORNADO!',
+                                    '⚡ SPEEDY!', '🔥 BLAZING!', '🚀 FLYING!', '💨 WHOOSH!',
+                                    '⭐ STELLAR!', '🎯 FOCUSED!', '💪 MIGHTY!', '🏅 CHAMPION!',
+                                    '🌟 BRILLIANT!', '🎪 SPECTACULAR!', '🎭 DRAMATIC!', '🎨 ARTISTIC!'
                                 ] : activityType === 'Running Distance' ? [
                                     '🏃‍♂️⚡ ZOOM!', '💪 POWER!', '🔥 BLAZING!', '🚀 SUPERSONIC!',
                                     '👑 RUNNING KING!', '⭐ CHAMPION!', '🎯 UNSTOPPABLE!', '🏆 LEGEND!',
-                                    '💥 EXPLOSIVE!', '🌟 SUPERSTAR!', '🎆 INCREDIBLE!', '⚡ LIGHTNING!'
+                                    '💥 EXPLOSIVE!', '🌟 SUPERSTAR!', '🎆 INCREDIBLE!', '⚡ LIGHTNING!',
+                                    '🏃‍♂️ SPEEDY!', '💨 SWIFT!', '🔥 FIERCE!', '⚡ ELECTRIC!',
+                                    '🎪 FANTASTIC!', '🌪️ WHIRLWIND!', '🎭 INCREDIBLE!', '🎨 GRACEFUL!'
                                 ] : [
                                     '🎯💥 POW!', '🔥 EPIC!', '⚡ AMAZING!', '🚀 SUPERB!', 
                                     '👑 CHAMPION!', '🏆 LEGEND!', '🌟 STAR!', '💪 BEAST!',
-                                    '🎆 WOW!', '💥 BOOM!', '🌪️ WILD!', '⭐ HERO!'
+                                    '🎆 WOW!', '💥 BOOM!', '🌪️ WILD!', '⭐ HERO!',
+                                    '🎪 SPECTACULAR!', '🎭 DRAMATIC!', '🎨 ARTISTIC!', '⚡ ELECTRIC!',
+                                    '🔥 FIERCE!', '💨 SWIFT!', '🌟 BRILLIANT!', '🎯 FOCUSED!'
                                 ];
                                 
-                                const randomMessage = popupMessages[Math.floor(Math.random() * popupMessages.length)];
+                                // Track used messages to avoid repeats
+                                if (!window.usedPopupMessages) window.usedPopupMessages = [];
+                                
+                                // Get unused messages
+                                const unusedMessages = allPopupMessages.filter(msg => !window.usedPopupMessages.includes(msg));
+                                
+                                // If all used, reset the list
+                                if (unusedMessages.length === 0) {
+                                    window.usedPopupMessages = [];
+                                    unusedMessages.push(...allPopupMessages);
+                                }
+                                
+                                // Pick random unique message
+                                const randomMessage = unusedMessages[Math.floor(Math.random() * unusedMessages.length)];
+                                window.usedPopupMessages.push(randomMessage);
                                 
                                 // Create popup box entity
                                 const popupBox = viewer.entities.add({
@@ -2517,7 +2552,7 @@
                     }, 100); // Smooth 100ms intervals
                     
                     // Store animation for cleanup
-                    worldDistanceAnimation = spinAnimation;
+                    worldDistanceAnimation = epicAnimation;
                     
                     console.log(`✅ Epic spinning visualization started for ${activityType}!`);
                     
@@ -2785,6 +2820,29 @@
                         toggleRoutesBtn.textContent = '🌍 Show All Routes on Globe';
                         toggleRoutesBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
                     }
+                });
+            }
+            
+            // Zwift routes toggle button
+            const toggleZwiftBtn = document.getElementById('toggleZwiftBtn');
+            if (toggleZwiftBtn) {
+                toggleZwiftBtn.addEventListener('click', () => {
+                    showZwiftRoutes = !showZwiftRoutes;
+                    
+                    // Update button text and style  
+                    if (showZwiftRoutes) {
+                        toggleZwiftBtn.textContent = '🏠 Show Zwift Routes (Indoor)';
+                        toggleZwiftBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+                    } else {
+                        toggleZwiftBtn.textContent = '🏠 Hide Zwift Routes (Indoor)';
+                        toggleZwiftBtn.style.background = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
+                    }
+                    
+                    // Update route visibility on map and in sidebar
+                    updatePermanentRouteVisibility();
+                    populateRoutesList();
+                    
+                    console.log(`🏠 Zwift routes ${showZwiftRoutes ? 'shown' : 'hidden'}`);
                 });
             }
             
