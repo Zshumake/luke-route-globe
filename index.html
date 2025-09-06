@@ -75,6 +75,69 @@
             opacity: 0.9;
         }
 
+        /* Luke's Profile Image with Purple Circle Highlight */
+        .luke-profile-section {
+            text-align: center;
+            margin: 15px 0;
+        }
+
+        .luke-profile-highlight {
+            position: relative;
+            display: inline-block;
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 50%, #c084fc 100%);
+            padding: 5px;
+            box-shadow: 
+                0 0 20px rgba(139, 92, 246, 0.6),
+                0 0 40px rgba(139, 92, 246, 0.3),
+                inset 0 2px 4px rgba(255, 255, 255, 0.2);
+            animation: pulseGlow 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulseGlow {
+            0% {
+                box-shadow: 
+                    0 0 20px rgba(139, 92, 246, 0.6),
+                    0 0 40px rgba(139, 92, 246, 0.3),
+                    inset 0 2px 4px rgba(255, 255, 255, 0.2);
+                transform: scale(1);
+            }
+            100% {
+                box-shadow: 
+                    0 0 30px rgba(139, 92, 246, 0.8),
+                    0 0 60px rgba(139, 92, 246, 0.4),
+                    0 0 80px rgba(139, 92, 246, 0.2),
+                    inset 0 2px 4px rgba(255, 255, 255, 0.2);
+                transform: scale(1.02);
+            }
+        }
+
+        .luke-profile-img {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .luke-profile-img:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .luke-profile-name {
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-top: 8px;
+            margin-bottom: 0;
+            color: #f1f5f9;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
         .route-controls {
             padding: 20px;
             border-bottom: 1px solid #334155;
@@ -311,9 +374,17 @@
                 <h1>🌍 Luke's Routes</h1>
                 <p>Explore athletic adventures worldwide</p>
                 
-                <!-- Luke's Head Image Section (Hidden - for animation use only) -->
+                <!-- Luke's Profile Image Section with Purple Highlight -->
+                <div class="luke-profile-section" style="text-align: center; margin: 15px 0;">
+                    <div id="lukeProfileContainer" class="luke-profile-highlight">
+                        <img id="lukeHeadImg" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Ccircle cx='40' cy='40' r='35' fill='%238b5cf6'/%3E%3Ctext x='40' y='50' font-size='30' text-anchor='middle' fill='white'%3E🏃‍♂️%3E/text%3E%3C/svg%3E" alt="Luke's Profile" class="luke-profile-img">
+                    </div>
+                    <p class="luke-profile-name">Luke</p>
+                </div>
+                
+                <!-- Hidden preview for animation use only -->
                 <div id="lukeHeadPreview" style="display: none;">
-                    <img id="lukeHeadImg" src="" alt="Luke's Face" style="width: 60px; height: 60px; object-fit: cover;">
+                    <img src="" alt="Luke's Face" style="width: 60px; height: 60px; object-fit: cover;">
                 </div>
                 <button id="uploadLukeHeadBtn" style="display: none;">
                     📷 Luke's Face Status
@@ -361,7 +432,7 @@
                     </div>
                     <div class="stat-item">
                         <div class="stat-value" id="cyclingDistance">0 km</div>
-                        <div class="stat-label">😴️ Cycling</div>
+                        <div class="stat-label">🚴‍♂️ Cycling</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-value" id="runningDistance">0 km</div>
@@ -988,14 +1059,17 @@
                 
                 if (cached && cacheTimestamp) {
                     const cacheAge = Date.now() - parseInt(cacheTimestamp);
-                    const maxAge = 12 * 60 * 60 * 1000; // 12 hours (shorter for big datasets)
+                    const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days per Strava API requirements
                     
                     if (cacheAge < maxAge) {
                         const routes = JSON.parse(cached);
-                        console.log(`✨ CACHE HIT: ${routes.length} routes (${(cached.length/1024).toFixed(0)}KB, ${(cacheAge/1000/60).toFixed(0)}min old)`);
+                        const ageHours = Math.floor(cacheAge / (60 * 60 * 1000));
+                        const ageDays = Math.floor(ageHours / 24);
+                        const ageDisplay = ageDays > 0 ? `${ageDays}d ${ageHours % 24}h` : `${ageHours}h`;
+                        console.log(`✨ CACHE HIT: ${routes.length} routes (${(cached.length/1024).toFixed(0)}KB, ${ageDisplay} old)`);
                         return routes;
                     } else {
-                        console.log('⏰ Cache expired (12hr limit for performance)');
+                        console.log('⏰ Cache expired (7-day Strava API limit reached)');
                         clearRouteCache();
                     }
                 }
@@ -1048,6 +1122,33 @@
             localStorage.removeItem('strava_routes_cache');
             localStorage.removeItem('strava_routes_cache_timestamp');
             console.log('🧽 Cache cleared');
+        }
+
+        // Proactive cache validation and cleanup (Strava API compliance)
+        function validateCacheExpiration() {
+            try {
+                const cacheTimestamp = localStorage.getItem('strava_routes_cache_timestamp');
+                if (cacheTimestamp) {
+                    const cacheAge = Date.now() - parseInt(cacheTimestamp);
+                    const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days per Strava API requirements
+                    
+                    if (cacheAge >= maxAge) {
+                        console.log('🕒 Proactive cache cleanup: 7-day expiration reached');
+                        clearRouteCache();
+                        return false; // Cache was expired and cleared
+                    }
+                    
+                    const ageDays = Math.floor(cacheAge / (24 * 60 * 60 * 1000));
+                    const ageHours = Math.floor((cacheAge % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+                    console.log(`✅ Cache valid: ${ageDays}d ${ageHours}h old (max 7 days)`);
+                    return true; // Cache is still valid
+                }
+                return false; // No cache exists
+            } catch (error) {
+                console.warn('⚠️ Cache validation failed:', error);
+                clearRouteCache(); // Clear corrupted cache
+                return false;
+            }
         }
         
         // Progressive route loading (show first 100, then continue)
@@ -3461,30 +3562,85 @@
                         );
                     }
                     
-                    // 2. SPAWN CONFETTI around the globe! (Fixed z-order)
-                    if (celebrationFrame % 3 === 0) { // Every 3 frames
-                        for (let i = 0; i < 5; i++) {
+                    // 2. ENHANCED CONFETTI PARTICLE SYSTEM with falling physics!
+                    if (celebrationFrame % 2 === 0) { // More frequent spawning
+                        for (let i = 0; i < 8; i++) { // More confetti particles
                             const randomLng = (Math.random() - 0.5) * 360;
                             const randomLat = (Math.random() - 0.5) * 180;
-                            // Keep confetti high above Earth surface to prevent z-fighting
-                            const confettiHeight = 8000000 + Math.random() * 5000000; // Much higher altitude
+                            const startHeight = 12000000 + Math.random() * 3000000; // Higher spawn altitude
+                            
+                            // Create confetti with physics properties
+                            const confettiData = {
+                                lng: randomLng,
+                                lat: randomLat,
+                                height: startHeight,
+                                initialHeight: startHeight,
+                                fallSpeed: 20000 + Math.random() * 30000, // Random fall speeds
+                                swaySpeed: Math.random() * 0.02 - 0.01, // Lateral swaying
+                                rotationSpeed: Math.random() * 0.2 - 0.1, // Spinning
+                                rotation: 0,
+                                color: [Cesium.Color.GOLD, Cesium.Color.ORANGE, Cesium.Color.LIME, 
+                                       Cesium.Color.CYAN, Cesium.Color.MAGENTA, Cesium.Color.RED,
+                                       Cesium.Color.YELLOW, Cesium.Color.PINK][i % 8].withAlpha(0.9),
+                                size: 6 + Math.random() * 10,
+                                lifespan: 0
+                            };
                             
                             const confetti = viewer.entities.add({
-                                position: Cesium.Cartesian3.fromDegrees(randomLng, randomLat, confettiHeight),
+                                position: Cesium.Cartesian3.fromDegrees(confettiData.lng, confettiData.lat, confettiData.height),
                                 point: {
-                                    pixelSize: 8 + Math.random() * 8,
-                                    color: [Cesium.Color.RED, Cesium.Color.BLUE, Cesium.Color.YELLOW, 
-                                           Cesium.Color.GREEN, Cesium.Color.MAGENTA, Cesium.Color.CYAN][Math.floor(Math.random() * 6)],
-                                    // Remove depth test disable to respect proper z-ordering
+                                    pixelSize: confettiData.size,
+                                    color: confettiData.color,
+                                    outlineColor: Cesium.Color.WHITE,
+                                    outlineWidth: 1,
                                     heightReference: Cesium.HeightReference.NONE
                                 }
                             });
+                            
+                            // Store physics data for animation
+                            confetti.confettiData = confettiData;
                             confettiEntities.push(confetti);
                             worldDistanceEntities.push(confetti);
                         }
                     }
                     
-                    // 3. SPIN THE CELEBRATION text
+                    // 3. ANIMATE EXISTING CONFETTI with falling physics!
+                    confettiEntities.forEach(confetti => {
+                        if (confetti.confettiData) {
+                            const data = confetti.confettiData;
+                            data.lifespan++;
+                            
+                            // Apply falling physics
+                            data.height -= data.fallSpeed;
+                            data.lng += data.swaySpeed * Math.sin(data.lifespan * 0.1); // Swaying motion
+                            data.rotation += data.rotationSpeed; // Spinning
+                            
+                            // Update visual properties
+                            confetti.position = Cesium.Cartesian3.fromDegrees(data.lng, data.lat, Math.max(data.height, 0));
+                            
+                            // Fade out as it falls closer to Earth
+                            const fadeProgress = Math.max(0, (data.height / data.initialHeight));
+                            const fadedColor = data.color.withAlpha(fadeProgress * 0.9);
+                            confetti.point.color = fadedColor;
+                            confetti.point.pixelSize = data.size * (0.5 + fadeProgress * 0.5); // Shrink as it falls
+                            
+                            // Remove if it hits the ground or fades out
+                            if (data.height <= 0 || fadeProgress < 0.1) {
+                                if (viewer.entities.contains(confetti)) {
+                                    viewer.entities.remove(confetti);
+                                }
+                            }
+                        }
+                    });
+                    
+                    // Clean up removed confetti from array
+                    for (let i = confettiEntities.length - 1; i >= 0; i--) {
+                        if (!viewer.entities.contains(confettiEntities[i])) {
+                            confettiEntities.splice(i, 1);
+                        }
+                    }
+                    
+                    // 4. SPIN THE CELEBRATION text
                     if (infoEntity && celebrationFrame % 10 === 0) {
                         const celebrations = [
                             `🎆 ${activityType.toUpperCase()} LEGEND! 🎆\n\n📍 ${distanceKm.toFixed(1)} km CRUSHED!\n🌍 ${timesAroundWorld.toFixed(2)}x around world\n\n🎉 LUKE IS UNSTOPPABLE! 🎉`,
@@ -3517,10 +3673,10 @@
             }, 100);
         }
         
-        // Enhanced 45-second animation with head rotation and celebration dance
+        // Enhanced 15-second animation with head rotation and celebration dance
         function animateEpicJourneyEnhanced(distanceKm) {
             try {
-                console.log(`🚀 EPIC JOURNEY ANIMATION: ${distanceKm.toFixed(1)}km over 25 seconds`);
+                console.log(`🚀 EPIC JOURNEY ANIMATION: ${distanceKm.toFixed(1)}km over 15 seconds`);
                 
                 // Show the overlay
                 const overlay = document.getElementById('distanceOverlay');
@@ -3535,16 +3691,16 @@
                 const timesAroundWorld = distanceKm / earthCircumference;
                 const totalDegrees = (distanceKm / earthCircumference) * 360;
                 
-                // FIXED: Faster 25-second animation
-                const animationDurationSeconds = 25;
+                // FIXED: Much faster 15-second animation
+                const animationDurationSeconds = 15;
                 const displaySpeedKmh = distanceKm / (animationDurationSeconds / 3600); // km/h
                 const displaySpeedMph = displaySpeedKmh * 0.621371; // mph
                 
                 console.log(`🌍 EPIC JOURNEY: ${distanceKm}km = ${timesAroundWorld.toFixed(2)}x around Earth`);
                 console.log(`🏃 Visual Speed: ${displaySpeedMph.toFixed(0)} mph (${displaySpeedKmh.toFixed(0)} km/h)`);
                 
-                // Setup 25-second animation (25 * 30 = 750 frames at 30fps)
-                const maxFrames = 750; // 25 seconds at 30fps
+                // Setup 15-second animation (15 * 30 = 450 frames at 30fps)
+                const maxFrames = 450; // 15 seconds at 30fps
                 const distanceStep = distanceKm / maxFrames;
                 const degreesStep = totalDegrees / maxFrames;
                 let frame = 0;
@@ -3618,11 +3774,21 @@
                         return progressiveLinePositions;
                     }, false);
                     
-                    // Move Luke's head with tilting/rotation (15-20 degrees left/right)
-                    const tiltCycle = Math.sin(elapsedSeconds * 0.3) * 0.35; // ~20 degree tilt, slow cycle
-                    lukeHeadEntity.position = newPosition;
+                    // ENHANCED: Faster, more dynamic Luke head movements!
+                    const fastTiltCycle = Math.sin(elapsedSeconds * 0.8) * 0.4; // FASTER: 0.8 vs 0.3, larger tilt 0.4 vs 0.35
+                    const verticalBob = Math.sin(elapsedSeconds * 1.2) * 15000; // UP/DOWN bobbing motion
+                    const lateralSway = Math.cos(elapsedSeconds * 0.6) * 8000; // LEFT/RIGHT swaying
+                    
+                    // Enhanced position with celebration movements (up/down/left/right)
+                    const enhancedPosition = Cesium.Cartesian3.fromDegrees(
+                        wrappedLng + (lateralSway / 111000), // Convert meters to degrees approx
+                        routeLatitude,
+                        800000 + verticalBob // Dynamic height with bobbing
+                    );
+                    
+                    lukeHeadEntity.position = enhancedPosition;
                     if (lukeHeadEntity.billboard) {
-                        lukeHeadEntity.billboard.rotation = tiltCycle; // Smooth head tilting
+                        lukeHeadEntity.billboard.rotation = fastTiltCycle; // Faster head tilting during travel
                     }
                     
                     // Sparkle trail effects
@@ -3667,7 +3833,7 @@
                             // CRITICAL: Re-enable camera corrections after animation ends
                             isAnimationInProgress = false;
                             console.log('✨ Animation completed - camera corrections re-enabled');
-                        }, 6000); // Shorter for 25-second animation
+                        }, 4000); // Shorter for 15-second animation
                     }
                     
                 }, 33); // 30fps
@@ -3686,22 +3852,28 @@
             const celebrationDance = setInterval(() => {
                 celebrationFrame++;
                 
-                // Energetic head rocking dance
-                const rockingMotion = Math.sin(celebrationFrame * 0.8) * 0.6; // Fast rocking
-                const bouncingMotion = Math.abs(Math.sin(celebrationFrame * 0.5)) * 50000; // Bouncing up/down
+                // ULTRA-ENERGETIC celebration movements! 
+                const fasterRocking = Math.sin(celebrationFrame * 1.2) * 0.8; // MUCH FASTER tilting
+                const wildBouncing = Math.abs(Math.sin(celebrationFrame * 0.9)) * 80000; // HIGHER bouncing
+                const leftRightDance = Math.sin(celebrationFrame * 1.4) * 12000; // LEFT/RIGHT dancing
+                const circularMotion = Math.cos(celebrationFrame * 0.7) * 10000; // CIRCULAR movement
                 
-                // Get current position and add bouncing
+                // Get current position and add ALL celebration movements!
                 const currentPos = lukeHeadEntity.position.getValue(viewer.clock.currentTime);
                 const cartographic = Cesium.Cartographic.fromCartesian(currentPos);
-                const newHeight = 800000 + bouncingMotion;
                 
-                // Update position with bouncing and rotation with rocking
+                // ENHANCED: Multi-dimensional celebration dance!
+                const celebrationHeight = 800000 + wildBouncing; // Dynamic height bouncing
+                const celebrationLng = cartographic.longitude + (leftRightDance / 111000); // LEFT/RIGHT dancing
+                const celebrationLat = cartographic.latitude + (circularMotion / 111000); // CIRCULAR movement
+                
+                // Update position with FULL 3D celebration dance!
                 lukeHeadEntity.position = Cesium.Cartesian3.fromRadians(
-                    cartographic.longitude, cartographic.latitude, newHeight
+                    celebrationLng, celebrationLat, celebrationHeight
                 );
                 
                 if (lukeHeadEntity.billboard) {
-                    lukeHeadEntity.billboard.rotation = rockingMotion;
+                    lukeHeadEntity.billboard.rotation = fasterRocking; // MUCH faster head rocking
                 }
                 
                 // Add celebration sparkles
@@ -4011,6 +4183,9 @@
 
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 App startup: Validating Strava cache compliance...');
+            validateCacheExpiration(); // Proactive 7-day cache validation
+            
             initializeApp();
             runBasicDiagnostics();
         });
