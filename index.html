@@ -1631,12 +1631,6 @@
                         console.log('🎯 Preventing camera drift - constraining zoom');
                         // FIXED: Use Earth-centered view helper
                         ensureEarthCenteredView();
-                            orientation: {
-                                heading: viewer.camera.heading,
-                                pitch: Math.max(viewer.camera.pitch, -Math.PI/2), // Keep looking down at Earth
-                                roll: viewer.camera.roll
-                            }
-                        });
                     }
                 });
                 
@@ -1661,8 +1655,6 @@
                         // Prevent the zoom if it would go too high
                         // FIXED: Use Earth-centered view helper
                         ensureEarthCenteredView();
-                            orientation: viewer.camera.getOrientation()
-                        });
                     }
                     
                     return result;
