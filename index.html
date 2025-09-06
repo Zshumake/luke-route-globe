@@ -377,12 +377,12 @@
         // METHOD 2: Base64 (paste converted image data here)
         const LUKES_HEAD_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='; // Replace with actual base64
         
-        // METHOD 3: Local file reference (put Luke's photo in same folder as this HTML file)
+        // METHOD 3: Local file reference (base64 data from luke.txt file)
         // 👇 UPDATE THIS with your actual filename! 👇
-        const LUKES_HEAD_LOCAL = './Luke\'s face.png'; // Fixed to match exact filename (capital L, curly apostrophe)
+        const LUKES_HEAD_LOCAL = './luke.txt'; // Base64 data file
         
-        // Choose which method to use (1=URL, 2=Base64, 3=Local file)
-        const IMAGE_METHOD = 3; // Set to 3 to use local file
+        // Choose which method to use (1=URL, 2=Base64, 3=Local file, 4=Base64 from file)
+        const IMAGE_METHOD = 4; // Set to 4 to load base64 from luke.txt file
         const AUTO_LOAD_LUKES_FACE = true; // Automatically load Luke's face on startup
         
         function getLukesImage() {
@@ -390,7 +390,34 @@
                 case 1: return LUKES_HEAD_URL;
                 case 2: return LUKES_HEAD_BASE64;
                 case 3: return LUKES_HEAD_LOCAL;
+                case 4: return null; // Will be loaded async
                 default: return LUKES_HEAD_BASE64;
+            }
+        }
+
+        // Async function to load Luke's image from base64 file
+        async function loadLukesImageFromFile() {
+            try {
+                console.log('📄 Loading Luke\'s face from luke.txt file...');
+                const response = await fetch('./luke.txt');
+                if (!response.ok) {
+                    throw new Error(`Failed to load luke.txt: ${response.status}`);
+                }
+                const base64Data = await response.text();
+                // Clean up the base64 data (remove any whitespace/newlines)
+                const cleanBase64 = base64Data.trim();
+                
+                // Check if it already has the data: prefix
+                const imageSource = cleanBase64.startsWith('data:image/') 
+                    ? cleanBase64 
+                    : `data:image/png;base64,${cleanBase64}`;
+                    
+                console.log('✅ Successfully loaded Luke\'s face from file');
+                return imageSource;
+            } catch (error) {
+                console.error('❌ Failed to load Luke\'s face from file:', error);
+                console.log('🔄 Falling back to default base64 data...');
+                return LUKES_HEAD_BASE64;
             }
         }
         
@@ -1316,7 +1343,7 @@
                 const controller = scene.screenSpaceCameraController;
                 controller.enableCollisionDetection = false; // Performance improvement
                 controller.minimumZoomDistance = 0.5; // Allow very close zoom
-                controller.maximumZoomDistance = 50000000.0;
+                controller.maximumZoomDistance = 30000000.0; // Reduced max zoom to prevent drift
                 
                 // AGGRESSIVE camera drift prevention
                 controller.enableTilt = true;
@@ -1324,6 +1351,63 @@
                 controller.enableTranslate = true;
                 controller.enableZoom = true;
                 controller.enableRotate = true;
+                
+                // IMPROVED: Add real-time camera constraint to prevent drift
+                viewer.camera.moveEnd.addEventListener(() => {
+                    const cameraHeight = viewer.camera.positionCartographic.height;
+                    const cameraPosition = viewer.camera.position;
+                    const earthCenter = Cesium.Cartesian3.ZERO;
+                    const distanceToEarth = Cesium.Cartesian3.distance(cameraPosition, earthCenter);
+                    
+                    // If camera is getting too far from Earth, constrain it
+                    if (cameraHeight > 25000000 || distanceToEarth > 35000000) {
+                        console.log('🎯 Preventing camera drift - constraining zoom');
+                        viewer.camera.setView({
+                            destination: Cesium.Cartesian3.fromDegrees(
+                                viewer.camera.positionCartographic.longitude * 180 / Math.PI,
+                                viewer.camera.positionCartographic.latitude * 180 / Math.PI,
+                                Math.min(cameraHeight, 20000000)
+                            ),
+                            orientation: {
+                                heading: viewer.camera.heading,
+                                pitch: Math.max(viewer.camera.pitch, -Math.PI/2), // Keep looking down at Earth
+                                roll: viewer.camera.roll
+                            }
+                        });
+                    }
+                });
+                
+                // ADDITIONAL: Prevent extreme zoom out with scroll wheel
+                controller.zoomEventTypes = [
+                    Cesium.CameraEventType.WHEEL,
+                    Cesium.CameraEventType.PINCH
+                ];
+                
+                // Override the default zoom behavior to add constraints
+                const originalZoom = controller._zoom3D;
+                controller._zoom3D = function(startPosition, movement) {
+                    // Get current camera height before zoom
+                    const beforeHeight = viewer.camera.positionCartographic.height;
+                    
+                    // Call original zoom function
+                    const result = originalZoom.call(this, startPosition, movement);
+                    
+                    // Check camera height after zoom and constrain if needed
+                    const afterHeight = viewer.camera.positionCartographic.height;
+                    if (afterHeight > 25000000) {
+                        // Prevent the zoom if it would go too high
+                        viewer.camera.setView({
+                            destination: Cesium.Cartesian3.fromDegrees(
+                                viewer.camera.positionCartographic.longitude * 180 / Math.PI,
+                                viewer.camera.positionCartographic.latitude * 180 / Math.PI,
+                                Math.min(beforeHeight * 1.2, 20000000) // Allow some zoom but limit it
+                            ),
+                            orientation: viewer.camera.getOrientation()
+                        });
+                    }
+                    
+                    return result;
+                };
                 
                 // Set up continuous camera monitoring to prevent drift
                 let lastValidCameraHeight = 15000000;
@@ -1442,9 +1526,17 @@
                 // Auto-load Luke's face if enabled
                 if (AUTO_LOAD_LUKES_FACE) {
                     console.log('🤯 Auto-loading Luke\'s face...');
-                    const lukesImage = getLukesImage();
-                    console.log('📷 Using Luke\'s image:', lukesImage.substring(0, 50) + '...');
-                    setLukesHeadImage(lukesImage);
+                    if (IMAGE_METHOD === 4) {
+                        // Load asynchronously from file
+                        const lukesImage = await loadLukesImageFromFile();
+                        console.log('📷 Using Luke\'s image from file:', lukesImage.substring(0, 50) + '...');
+                        setLukesHeadImage(lukesImage);
+                    } else {
+                        // Use synchronous method
+                        const lukesImage = getLukesImage();
+                        console.log('📷 Using Luke\'s image:', lukesImage.substring(0, 50) + '...');
+                        setLukesHeadImage(lukesImage);
+                    }
                 }
                 
                 console.log('✅ Luke Route Globe initialized successfully!');
@@ -1988,9 +2080,22 @@
                     duration: 2.0,
                     offset: new Cesium.HeadingPitchRange(0, -0.7, distance), // Less steep angle
                     complete: () => {
+                        // Ensure camera is looking down at Earth to prevent drift
+                        const currentPos = viewer.camera.position;
+                        const currentCartographic = viewer.camera.positionCartographic;
+                        
+                        viewer.camera.setView({
+                            destination: currentPos,
+                            orientation: {
+                                heading: viewer.camera.heading,
+                                pitch: Math.max(viewer.camera.pitch, -Math.PI/3), // Ensure looking down 
+                                roll: 0.0 // Reset roll to prevent weird angles
+                            }
+                        });
+                        
                         // Request render after camera movement completes
                         viewer.scene.requestRender();
-                        console.log(`Flew to route: ${route.name} with distance ${distance}m`);
+                        console.log(`Flew to route: ${route.name} with distance ${distance}m, camera stabilized`);
                     }
                 });
                 
