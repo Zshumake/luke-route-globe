@@ -559,6 +559,60 @@
                 }
             }
             
+            // NEW: Get athlete stats quickly (total distances, times, etc.)
+            async getAthleteStats() {
+                if (!this.accessToken) {
+                    throw new Error('Not authenticated with Strava');
+                }
+                
+                try {
+                    console.log('📊 Fetching Luke\'s total stats from Strava...');
+                    const response = await fetch(
+                        `${STRAVA_CONFIG.apiBaseUrl}/athletes/${await this.getAthleteId()}/stats`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${this.accessToken}`
+                            }
+                        }
+                    );
+                    
+                    if (response.status === 401) {
+                        this.clearTokens();
+                        throw new Error('Strava token expired');
+                    }
+                    
+                    const stats = await response.json();
+                    console.log('📊 Luke\'s total stats received:', stats);
+                    return stats;
+                } catch (error) {
+                    console.error('Failed to fetch athlete stats:', error);
+                    throw error;
+                }
+            }
+            
+            // Helper: Get athlete ID (needed for stats endpoint)
+            async getAthleteId() {
+                if (this.athleteId) return this.athleteId;
+                
+                try {
+                    const response = await fetch(
+                        `${STRAVA_CONFIG.apiBaseUrl}/athlete`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${this.accessToken}`
+                            }
+                        }
+                    );
+                    
+                    const athlete = await response.json();
+                    this.athleteId = athlete.id;
+                    return this.athleteId;
+                } catch (error) {
+                    console.error('Failed to fetch athlete info:', error);
+                    throw error;
+                }
+            }
+            
             // Clear stored tokens
             clearTokens() {
                 this.accessToken = null;
@@ -746,6 +800,20 @@
                 if (!stravaAPI.isAuthenticated()) {
                     console.log('⚠️ Not authenticated with Strava - showing sample data');
                     return generateSampleRoutes();
+                }
+                
+                // 🚀 QUICK STATS LOAD: Get total distances immediately!
+                try {
+                    console.log('⚡ PRIORITY: Loading Luke\'s total stats first...');
+                    const quickStats = await stravaAPI.getAthleteStats();
+                    
+                    if (quickStats) {
+                        // Update stats display immediately with Strava totals
+                        updateStatsFromStravaData(quickStats);
+                        console.log('✅ Quick stats loaded and displayed!');
+                    }
+                } catch (statsError) {
+                    console.warn('⚠️ Could not load quick stats:', statsError.message);
                 }
                 
                 // Load RECENT activities only (optimized for speed)
@@ -1952,6 +2020,55 @@
             console.log(`📊 - Running routes: ${allRunningRoutes.length} (${runningDistance.toFixed(1)} km)`);
             console.log(`📊 - Filtered routes: ${filteredRoutes.length} (${totalDistance.toFixed(1)} km)`);
         }
+        
+        // NEW: Update stats immediately from Strava athlete stats (before individual routes load)
+        function updateStatsFromStravaData(stravaStats) {
+            try {
+                console.log('📊 FAST STATS: Updating display with Strava athlete stats...');
+                
+                // Strava stats structure:
+                // stravaStats.all_ride_totals.distance (in meters)
+                // stravaStats.all_run_totals.distance (in meters) 
+                // stravaStats.all_ride_totals.count
+                // stravaStats.all_run_totals.count
+                
+                const cyclingDistanceKm = (stravaStats.all_ride_totals?.distance || 0) / 1000;
+                const runningDistanceKm = (stravaStats.all_run_totals?.distance || 0) / 1000;
+                const totalDistanceKm = cyclingDistanceKm + runningDistanceKm;
+                
+                const cyclingCount = stravaStats.all_ride_totals?.count || 0;
+                const runningCount = stravaStats.all_run_totals?.count || 0;
+                const totalCount = cyclingCount + runningCount;
+                
+                const cyclingTimeHours = Math.floor((stravaStats.all_ride_totals?.moving_time || 0) / 3600);
+                const runningTimeHours = Math.floor((stravaStats.all_run_totals?.moving_time || 0) / 3600);
+                const totalTimeHours = cyclingTimeHours + runningTimeHours;
+                
+                // Update UI immediately with real Strava totals!
+                document.getElementById('totalRoutes').textContent = totalCount;
+                document.getElementById('totalDistance').textContent = `${totalDistanceKm.toFixed(1)} km`;
+                document.getElementById('cyclingDistance').textContent = `${cyclingDistanceKm.toFixed(1)} km`;
+                document.getElementById('runningDistance').textContent = `${runningDistanceKm.toFixed(1)} km`;
+                document.getElementById('totalTime').textContent = `${totalTimeHours}h`;
+                // Countries will be updated when routes load
+                
+                console.log(`📊 FAST STATS LOADED:`);
+                console.log(`📊 - Total activities: ${totalCount}`);
+                console.log(`📊 - Cycling: ${cyclingCount} activities (${cyclingDistanceKm.toFixed(1)} km)`);
+                console.log(`📊 - Running: ${runningCount} activities (${runningDistanceKm.toFixed(1)} km)`);
+                console.log(`📊 - Total time: ${totalTimeHours} hours`);
+                
+                // Store for distance animations
+                window.stravaQuickStats = {
+                    cyclingDistance: cyclingDistanceKm,
+                    runningDistance: runningDistanceKm,
+                    totalDistance: totalDistanceKm
+                };
+                
+            } catch (error) {
+                console.error('❌ Error updating stats from Strava data:', error);
+            }
+        }
 
         // AROUND-THE-WORLD DISTANCE VISUALIZATION
         const EARTH_CIRCUMFERENCE_KM = 40075.017; // Earth's circumference at equator in km
@@ -1960,8 +2077,19 @@
         // Calculate total distances for different activity types
         function calculateTotalDistances() {
             try {
+                // 🚀 PRIORITY: Use quick Strava stats if available (much more accurate!)
+                if (window.stravaQuickStats) {
+                    console.log('📊 Using QUICK STRAVA STATS for distance calculations');
+                    return {
+                        cyclingDistance: window.stravaQuickStats.cyclingDistance,
+                        runningDistance: window.stravaQuickStats.runningDistance,
+                        totalDistance: window.stravaQuickStats.totalDistance
+                    };
+                }
+                
+                // Fallback: Calculate from loaded routes (if available)
                 if (!sampleRoutes || sampleRoutes.length === 0) {
-                    console.warn('⚠️ No routes available for distance calculation');
+                    console.warn('⚠️ No routes or quick stats available for distance calculation');
                     return { cyclingDistance: 0, runningDistance: 0, totalDistance: 0 };
                 }
                 
@@ -1972,7 +2100,7 @@
                 const runningDistance = runningRoutes.reduce((sum, route) => sum + (route.distance || 0), 0);
                 const totalDistance = cyclingDistance + runningDistance;
                 
-                console.log(`📊 Distance calculation:`);
+                console.log(`📊 Distance calculation (from routes):`);
                 console.log(`📊 - Cycling: ${cyclingRoutes.length} routes, ${cyclingDistance.toFixed(1)}km`);
                 console.log(`📊 - Running: ${runningRoutes.length} routes, ${runningDistance.toFixed(1)}km`);
                 console.log(`📊 - Total: ${totalDistance.toFixed(1)}km`);
