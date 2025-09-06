@@ -541,6 +541,39 @@
                 console.error('❌ Missing DOM elements for Luke\'s head setup');
             }
         }
+
+        // OPTIMIZATION: Polyline decoding utility to avoid GPS stream API calls
+        function decodePolyline(str, precision = 5) {
+            let index = 0, lat = 0, lng = 0;
+            const coordinates = [];
+            const factor = Math.pow(10, precision);
+            
+            while (index < str.length) {
+                let byte, shift = 0, result = 0;
+                do {
+                    byte = str.charCodeAt(index++) - 63;
+                    result |= (byte & 0x1F) << shift;
+                    shift += 5;
+                } while (byte >= 0x20);
+                
+                const deltaLat = ((result & 1) !== 0 ? ~(result >> 1) : (result >> 1));
+                lat += deltaLat;
+                
+                shift = result = 0;
+                do {
+                    byte = str.charCodeAt(index++) - 63;
+                    result |= (byte & 0x1F) << shift;
+                    shift += 5;
+                } while (byte >= 0x20);
+                
+                const deltaLng = ((result & 1) !== 0 ? ~(result >> 1) : (result >> 1));
+                lng += deltaLng;
+                
+                coordinates.push([lng / factor, lat / factor]); // [longitude, latitude]
+            }
+            
+            return coordinates;
+        }
         
         // Strava API Configuration
         const STRAVA_CONFIG = {
@@ -646,8 +679,11 @@
                 }
                 
                 try {
+                    // OPTIMIZATION: Increase per_page to reduce API calls (Strava allows up to 200)
+                    const optimizedPerPage = Math.min(perPage * 3, 200); // Triple the batch size
+                    
                     const response = await fetch(
-                        `${STRAVA_CONFIG.apiBaseUrl}/athlete/activities?page=${page}&per_page=${perPage}`,
+                        `${STRAVA_CONFIG.apiBaseUrl}/athlete/activities?page=${page}&per_page=${optimizedPerPage}`,
                         {
                             headers: {
                                 'Authorization': `Bearer ${this.accessToken}`
@@ -1036,17 +1072,29 @@
                             updateLoadingStatus(`Processing ${processedCount}/${allActivities.length} activities...`);
                         }
                         
-                        // Get GPS stream data for activities with GPS
-                        let streamData = null;
+                        // OPTIMIZATION: Use summary_polyline instead of expensive stream API calls
+                        let coordinateData = null;
                         if (activity.map && activity.map.summary_polyline) {
                             try {
-                                streamData = await stravaAPI.getActivityStream(activity.id);
-                            } catch (streamError) {
-                                console.warn(`⚠️ Could not load GPS data for ${activity.name}`);
+                                // Decode polyline locally (MUCH faster than API call)
+                                coordinateData = {
+                                    latlng: {
+                                        data: decodePolyline(activity.map.summary_polyline)
+                                    }
+                                };
+                                console.log(`⚡ FAST: Decoded ${coordinateData.latlng.data.length} coordinates from polyline for ${activity.name}`);
+                            } catch (decodeError) {
+                                console.warn(`⚠️ Polyline decode failed for ${activity.name}, trying stream API...`);
+                                // Fallback to stream API if polyline decode fails
+                                try {
+                                    coordinateData = await stravaAPI.getActivityStream(activity.id);
+                                } catch (streamError) {
+                                    console.warn(`⚠️ Could not load GPS data for ${activity.name}`);
+                                }
                             }
                         }
                         
-                        const route = transformStravaActivity(activity, streamData);
+                        const route = transformStravaActivity(activity, coordinateData);
                         
                         // Debug route processing
                         console.log(`🔍 PROCESSING: ${route.name}`);
@@ -1066,8 +1114,8 @@
                             console.log(`⚠️ ADDED NON-GPS ACTIVITY: ${route.name} (${route.type}) - No coordinates`);
                         }
                         
-                        // Rate limiting - wait between requests (respect API limits)
-                        await new Promise(resolve => setTimeout(resolve, 75)); // 13 requests per second max
+                        // OPTIMIZATION: Reduced rate limiting since we eliminated most GPS stream API calls
+                        await new Promise(resolve => setTimeout(resolve, 25)); // Faster processing since fewer API calls
                         
                     } catch (error) {
                         console.warn(`⚠️ Error processing activity ${activity.name}:`, error.message);
