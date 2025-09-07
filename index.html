@@ -1077,7 +1077,219 @@
             };
         };
         
-        // OPTIMIZED: Convert Strava activity data using only essential fields
+        // WEB WORKER: Background processing for large datasets
+        let routeProcessingWorker = null;
+
+        function createRouteProcessingWorker() {
+            // Create Web Worker inline to avoid external file dependency
+            const workerCode = `
+                // Polyline decoding function for Web Worker
+                function decodePolyline(encoded) {
+                    const points = [];
+                    let index = 0, lat = 0, lng = 0;
+                    
+                    while (index < encoded.length) {
+                        let b, shift = 0, result = 0;
+                        do {
+                            b = encoded.charCodeAt(index++) - 63;
+                            result |= (b & 0x1f) << shift;
+                            shift += 5;
+                        } while (b >= 0x20);
+                        const deltaLat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+                        lat += deltaLat;
+                        
+                        shift = 0;
+                        result = 0;
+                        do {
+                            b = encoded.charCodeAt(index++) - 63;
+                            result |= (b & 0x1f) << shift;
+                            shift += 5;
+                        } while (b >= 0x20);
+                        const deltaLng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+                        lng += deltaLng;
+                        
+                        points.push([lng * 1e-5, lat * 1e-5]);
+                    }
+                    return points;
+                }
+
+                // Coordinate subsampling for memory optimization
+                function subsampleCoordinates(coordinates, factor = 3) {
+                    if (!coordinates || coordinates.length <= factor * 2) return coordinates;
+                    return coordinates.filter((_, index) => index % factor === 0);
+                }
+
+                // Transform activity in worker thread
+                function transformStravaActivity(activity, includeFullCoords = false) {
+                    let coordinates = [];
+                    
+                    if (activity.map?.summary_polyline) {
+                        try {
+                            const fullCoords = decodePolyline(activity.map.summary_polyline);
+                            // Apply coordinate subsampling to save memory (keep every 3rd point)
+                            coordinates = includeFullCoords ? fullCoords : subsampleCoordinates(fullCoords, 3);
+                        } catch (error) {
+                            console.warn('Worker polyline decode error:', error.message);
+                        }
+                    }
+
+                    return {
+                        id: activity.id.toString(),
+                        name: activity.name || 'Untitled',
+                        type: (() => {
+                            const sportType = activity.sport_type || activity.type;
+                            return (sportType === 'Ride' || sportType === 'VirtualRide' || sportType === 'EBikeRide') 
+                                ? 'cycling' : 'running';
+                        })(),
+                        distance: Math.round((activity.distance || 0) / 100) / 10,
+                        coordinates: coordinates,
+                        
+                        // Enhanced Strava fields for detection
+                        trainer: activity.trainer,
+                        sport_type: activity.sport_type || activity.type,
+                        manual: activity.manual,
+                        private: activity.private,
+                        commute: activity.commute,
+                        workout_type: activity.workout_type,
+                        description: activity.description,
+                        device_name: activity.device_name,
+                        gear_id: activity.gear_id,
+                        start_date: activity.start_date
+                    };
+                }
+
+                // Worker message handler
+                self.onmessage = function(e) {
+                    const { activities, batchIndex, totalBatches } = e.data;
+                    const processedRoutes = [];
+                    
+                    // Process batch of activities
+                    for (let i = 0; i < activities.length; i++) {
+                        try {
+                            const route = transformStravaActivity(activities[i]);
+                            if (route.coordinates && route.coordinates.length > 0) {
+                                processedRoutes.push(route);
+                            }
+                        } catch (error) {
+                            console.warn('Worker route processing error:', error.message);
+                        }
+                        
+                        // Report progress every 10 items
+                        if (i % 10 === 0) {
+                            self.postMessage({
+                                type: 'progress',
+                                processed: i,
+                                total: activities.length,
+                                batchIndex: batchIndex,
+                                totalBatches: totalBatches
+                            });
+                        }
+                    }
+                    
+                    // Send completed batch
+                    self.postMessage({
+                        type: 'batch_complete',
+                        routes: processedRoutes,
+                        batchIndex: batchIndex,
+                        totalBatches: totalBatches
+                    });
+                };
+            `;
+
+            const blob = new Blob([workerCode], { type: 'application/javascript' });
+            return new Worker(URL.createObjectURL(blob));
+        }
+
+        // Process routes using Web Worker with batching
+        async function processRoutesWithWorker(activities) {
+            return new Promise((resolve, reject) => {
+                const BATCH_SIZE = 50; // Process 50 activities at a time
+                const batches = [];
+                const allProcessedRoutes = [];
+                
+                // Split activities into batches
+                for (let i = 0; i < activities.length; i += BATCH_SIZE) {
+                    batches.push(activities.slice(i, i + BATCH_SIZE));
+                }
+                
+                console.log(`🔧 WEB WORKER: Processing ${activities.length} activities in ${batches.length} batches`);
+                
+                if (!routeProcessingWorker) {
+                    routeProcessingWorker = createRouteProcessingWorker();
+                }
+                
+                let completedBatches = 0;
+                
+                routeProcessingWorker.onmessage = function(e) {
+                    const { type, routes, batchIndex, processed, total, totalBatches } = e.data;
+                    
+                    if (type === 'progress') {
+                        const overallProgress = ((batchIndex * BATCH_SIZE + processed) / activities.length * 100).toFixed(1);
+                        updateLoadingStatus(`⚡ Processing ${overallProgress}% (${batchIndex + 1}/${totalBatches} batches)`);
+                    } else if (type === 'batch_complete') {
+                        allProcessedRoutes.push(...routes);
+                        completedBatches++;
+                        
+                        console.log(`✅ BATCH ${batchIndex + 1}/${totalBatches} completed: ${routes.length} routes processed`);
+                        
+                        if (completedBatches === totalBatches) {
+                            console.log(`🎉 ALL BATCHES COMPLETED: ${allProcessedRoutes.length} total routes processed`);
+                            resolve(allProcessedRoutes);
+                        }
+                    }
+                };
+                
+                routeProcessingWorker.onerror = function(error) {
+                    console.error('❌ Web Worker error:', error);
+                    reject(error);
+                };
+                
+                // Send all batches to worker
+                batches.forEach((batch, index) => {
+                    routeProcessingWorker.postMessage({
+                        activities: batch,
+                        batchIndex: index,
+                        totalBatches: batches.length
+                    });
+                });
+            });
+        }
+
+        // 🚀 CRITICAL FIX #2: Intelligent coordinate compression for memory optimization
+        function compressCoordinates(coordinates, distance = 0) {
+            if (!coordinates || coordinates.length <= 2) return coordinates;
+            
+            // Dynamic compression based on activity distance and coordinate density
+            let compressionFactor = 2; // Default: keep every 2nd point
+            
+            // More aggressive compression for longer routes
+            if (distance > 100) compressionFactor = 5;        // >100km: keep every 5th point
+            else if (distance > 50) compressionFactor = 4;    // >50km: keep every 4th point  
+            else if (distance > 20) compressionFactor = 3;    // >20km: keep every 3rd point
+            
+            // Always keep start and end points
+            const compressed = [coordinates[0]]; // Start point
+            
+            // Apply compression to middle points
+            for (let i = compressionFactor; i < coordinates.length - 1; i += compressionFactor) {
+                compressed.push(coordinates[i]);
+            }
+            
+            // Always keep end point (if different from start)
+            if (coordinates.length > 1) {
+                compressed.push(coordinates[coordinates.length - 1]);
+            }
+            
+            // Log compression ratio for monitoring
+            const compressionRatio = ((coordinates.length - compressed.length) / coordinates.length * 100).toFixed(1);
+            if (coordinates.length > 100) { // Only log for significant routes
+                console.log(`🗜️ Compressed ${distance}km route: ${coordinates.length}→${compressed.length} points (${compressionRatio}% reduction)`);
+            }
+            
+            return compressed;
+        }
+
+        // LEGACY: Convert Strava activity data using only essential fields (fallback)
         function transformStravaActivity(activity, streamData = null) {
             // Fast coordinate processing
             let coordinates = [];
@@ -1088,6 +1300,9 @@
                 if (coordinates.length > 0 && Array.isArray(coordinates[0]) && coordinates[0].length === 2) {
                     // Swap [lat, lng] to [lng, lat] for Cesium
                     coordinates = coordinates.map(coord => [coord[1], coord[0]]);
+                    
+                    // 🚀 CRITICAL FIX #2: Aggressive coordinate compression for memory optimization
+                    coordinates = compressCoordinates(coordinates, activity.distance);
                 }
             }
             
@@ -1320,84 +1535,16 @@
                 console.log(`🎯 TOTAL ACTIVITIES FOUND: ${allActivities.length}`);
                 updateLoadingStatus(`Processing ${allActivities.length} activities...`);
                 
-                // Process all activities to routes
-                const routes = [];
-                let processedCount = 0;
+                // 🚀 CRITICAL FIX #1: Use Web Worker for background route processing
+                console.log('🔧 CRITICAL FIX #1: Using Web Worker for background processing...');
+                updateLoadingStatus(`Processing ${allActivities.length} activities with Web Worker...`);
                 
-                for (const activity of allActivities) {
-                    try {
-                        processedCount++;
-                        
-                        // Update progress every 10 activities
-                        if (processedCount % 10 === 0) {
-                            updateLoadingStatus(`Processing ${processedCount}/${allActivities.length} activities...`);
-                        }
-                        
-                        /*
-                        🚀 STRAVA DATA OPTIMIZATION ANALYSIS:
-                        
-                        WHAT STRAVA RETURNS (we ignore most of this):
-                        - name, distance, moving_time, start_date ✓ (WE USE)
-                        - sport_type ✓ (WE USE for cycling/running)
-                        - map.summary_polyline ✓ (WE USE for GPS)
-                        - id ✓ (WE USE for identification)
-                        
-                        FIELDS WE DON'T USE (saving bandwidth by ignoring):
-                        - elapsed_time, average_speed, max_speed, average_heartrate
-                        - average_cadence, average_watts, weighted_average_watts
-                        - kilojoules, device_name, embed_token, segment_efforts
-                        - splits_metric, splits_standard, laps, gear, partner_brand_tag
-                        - photos, highlighted_kudos, device_watts, has_kudos, kudos_count
-                        - comment_count, athlete_count, photo_count, trainer, commute
-                        - manual, private, visibility, flagged, gear_id, start_latitude
-                        - start_longitude, achievement_count, pr_count, total_photo_count
-                        - has_heartrate, elev_high, elev_low, upload_id, upload_id_str
-                        - external_id, from_accepted_tag, utc_offset, location_city
-                        - location_state, location_country, start_latlng, end_latlng
-                        - timezone, athlete, start_city, start_state, start_country
-                        
-                        RESULT: We use ~5% of the data Strava sends us!
-                        */
-                        
-                        // OPTIMIZATION: Use summary_polyline (2-4KB) instead of stream API (20-50KB)
-                        let coordinateData = null;
-                        if (activity.map?.summary_polyline) {
-                            try {
-                                // Decode polyline locally (MUCH faster than API call)
-                                coordinateData = {
-                                    latlng: {
-                                        data: decodePolyline(activity.map.summary_polyline)
-                                    }
-                                };
-                            } catch (decodeError) {
-                                // Skip activities with bad polyline data instead of expensive fallback
-                                console.warn(`⚠️ Skipping ${activity.name} - bad polyline`);
-                            }
-                        }
-                        
-                        const route = transformStravaActivity(activity, coordinateData);
-                        
-                        // Debug route processing
-                        // FAST: Minimal processing and logging
-                        if (route.coordinates && route.coordinates.length > 0) {
-                            routes.push(route);
-                            if (processedCount % 50 === 0) { // Log every 50th route to reduce spam
-                                console.log(`⚡ Processed ${processedCount}/${allActivities.length}: ${route.coordinates.length} points`);
-                            }
-                        } else {
-                            // Still add activities without GPS for stats (indoor workouts, etc.)
-                            routes.push(transformStravaActivity(activity));
-                        }
-                        
-                        // ULTRA FAST: Minimal delay since we're only doing local processing now
-                        if (processedCount % 10 === 0) {
-                            await new Promise(resolve => setTimeout(resolve, 1)); // Micro-delay every 10 items to prevent UI freezing
-                        }
-                        
-                    } catch (error) {
-                        console.warn(`⚠️ Error processing activity ${activity.name}:`, error.message);
-                    }
-                }
+                // Process routes using Web Worker to prevent UI freezing
+                const routes = await processRoutesWithWorker(allActivities, (progress) => {
+                    // Progress callback for UI updates
+                    const percentage = Math.round((progress.processed / progress.total) * 100);
+                    updateLoadingStatus(`Processing ${progress.processed}/${progress.total} activities (${percentage}%)...`);
+                });
                 
                 // OPTIMIZATION SUMMARY
                 const gpsRoutes = routes.filter(r => r.coordinates?.length > 0).length;
@@ -3065,12 +3212,22 @@
             }
         }
 
-        // Populate the routes list
+        // 🚀 CRITICAL FIX #3: Virtual scrolling for route list performance
+        let virtualScrollState = {
+            filteredRoutes: [],
+            itemHeight: 80, // Estimated height of each route item in pixels
+            visibleItems: 15, // Number of items to render at once
+            scrollTop: 0,
+            startIndex: 0,
+            endIndex: 15,
+            totalHeight: 0
+        };
+
+        // Populate the routes list with virtual scrolling
         function populateRoutesList() {
             const routesList = document.getElementById('routesList');
-            routesList.innerHTML = '';
             
-            console.log(`📜 Populating routes list - showZwiftRoutes: ${showZwiftRoutes}`);
+            console.log(`📜 Populating routes list with virtual scrolling - showZwiftRoutes: ${showZwiftRoutes}`);
             
             const filteredRoutes = sampleRoutes.filter(route => {
                 const matchesFilter = currentFilter === 'all' || route.type === currentFilter;
@@ -3085,12 +3242,79 @@
                 return shouldInclude;
             });
             
-            console.log(`📊 Filtered ${filteredRoutes.length} routes from ${sampleRoutes.length} total`);
+            console.log(`📊 Virtual scroll: ${filteredRoutes.length} routes from ${sampleRoutes.length} total`);
+            
+            // Update virtual scroll state
+            virtualScrollState.filteredRoutes = filteredRoutes;
+            virtualScrollState.totalHeight = filteredRoutes.length * virtualScrollState.itemHeight;
+            
+            // Set up virtual scrolling container
+            setupVirtualScrollContainer(routesList);
+            
+            // Render initial visible items
+            renderVisibleRoutes();
+        }
 
-            filteredRoutes.forEach(route => {
+        function setupVirtualScrollContainer(routesList) {
+            // Clear existing content
+            routesList.innerHTML = '';
+            
+            // Create virtual scroll structure
+            routesList.innerHTML = `
+                <div class="virtual-scroll-container" style="height: ${virtualScrollState.totalHeight}px; position: relative;">
+                    <div class="virtual-scroll-content" style="position: absolute; top: 0; width: 100%;"></div>
+                </div>
+            `;
+            
+            // Add scroll event listener with throttling
+            let scrollTimeout;
+            routesList.addEventListener('scroll', () => {
+                clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(() => {
+                    virtualScrollState.scrollTop = routesList.scrollTop;
+                    updateVisibleIndices();
+                    renderVisibleRoutes();
+                }, 16); // ~60fps throttling
+            });
+        }
+
+        function updateVisibleIndices() {
+            const { scrollTop, itemHeight, visibleItems, filteredRoutes } = virtualScrollState;
+            
+            virtualScrollState.startIndex = Math.floor(scrollTop / itemHeight);
+            virtualScrollState.endIndex = Math.min(
+                virtualScrollState.startIndex + visibleItems + 5, // Render 5 extra for smooth scrolling
+                filteredRoutes.length
+            );
+            
+            // Ensure we don't go below 0
+            virtualScrollState.startIndex = Math.max(0, virtualScrollState.startIndex);
+        }
+
+        function renderVisibleRoutes() {
+            const { filteredRoutes, startIndex, endIndex, itemHeight } = virtualScrollState;
+            const container = document.querySelector('.virtual-scroll-content');
+            
+            if (!container) return;
+            
+            // Clear existing items
+            container.innerHTML = '';
+            
+            // Create only visible items
+            for (let i = startIndex; i < endIndex; i++) {
+                const route = filteredRoutes[i];
+                if (!route) continue;
+                
                 const routeItem = document.createElement('div');
                 routeItem.className = 'route-item';
                 routeItem.dataset.routeId = route.id;
+                routeItem.style.cssText = `
+                    position: absolute;
+                    top: ${i * itemHeight}px;
+                    width: 100%;
+                    height: ${itemHeight}px;
+                    box-sizing: border-box;
+                `;
                 
                 routeItem.innerHTML = `
                     <div class="route-name">
@@ -3104,8 +3328,13 @@
                 `;
                 
                 routeItem.addEventListener('click', () => flyToRoute(route));
-                routesList.appendChild(routeItem);
-            });
+                container.appendChild(routeItem);
+            }
+            
+            // Performance monitoring
+            if (filteredRoutes.length > 100) {
+                console.log(`🚀 Virtual scroll: Rendered ${endIndex - startIndex} of ${filteredRoutes.length} routes (${((endIndex - startIndex) / filteredRoutes.length * 100).toFixed(1)}% DOM usage)`);
+            }
         }
 
         // Fly to a specific route
@@ -3118,9 +3347,20 @@
             // Add active class to clicked route
             document.querySelector(`[data-route-id="${route.id}"]`).classList.add('active');
             
-            // Clear existing route entities
-            routeEntities.forEach(entity => viewer.entities.remove(entity));
-            routeEntities = [];
+            // 🚀 PERFORMANCE: Optimized entity cleanup to prevent memory leaks
+            if (routeEntities.length > 0) {
+                console.log(`🧹 Cleaning up ${routeEntities.length} route entities`);
+                routeEntities.forEach(entity => {
+                    if (entity && !entity.isDestroyed()) {
+                        viewer.entities.remove(entity);
+                    }
+                });
+                routeEntities = [];
+                // Force garbage collection hint
+                if (routeEntities.length > 100) {
+                    viewer.scene.requestRender(); // Explicit render request after cleanup
+                }
+            }
             
             // Create route polyline with enhanced styling
             if (route.coordinates && route.coordinates.length > 0) {
