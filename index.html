@@ -75,6 +75,59 @@
             opacity: 0.9;
         }
 
+        /* Tab Navigation System */
+        .tab-navigation {
+            display: flex;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border-top: 1px solid #334155;
+            margin: 0 -20px;
+            padding: 0;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 15px 10px;
+            border: none;
+            background: transparent;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+        }
+
+        .tab-btn:hover {
+            background: rgba(59, 130, 246, 0.1);
+            color: #e2e8f0;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            border-bottom-color: #60a5fa;
+        }
+
+        /* Tab Content Areas */
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Specific styling for My Routes tab to maintain existing layout */
+        #lukes-routes {
+            padding: 0;
+        }
+
+        /* Styling for Discover Routes tab */
+        #discover-routes {
+            padding: 20px;
+            padding-top: 15px;
+        }
+
         /* Luke's Profile Image with Purple Circle Highlight */
         .luke-profile-section {
             text-align: center;
@@ -371,8 +424,8 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="sidebar-header">
-                <h1>🌍 Luke's Routes</h1>
-                <p>Explore athletic adventures worldwide</p>
+                <h1>🌍 Luke's World</h1>
+                <p>Athletic adventures & route discovery</p>
                 
                 <!-- Luke's Profile Image Section with Purple Highlight -->
                 <div class="luke-profile-section" style="text-align: center; margin: 15px 0;">
@@ -389,8 +442,17 @@
                 <button id="uploadLukeHeadBtn" style="display: none;">
                     📷 Luke's Face Status
                 </button>
+
+                <!-- Tab Navigation -->
+                <div class="tab-navigation">
+                    <button class="tab-btn active" data-tab="lukes-routes">🏠 My Routes</button>
+                    <button class="tab-btn" data-tab="discover-routes">🌍 Discover</button>
+                </div>
             </div>
             
+            <!-- Tab Content Areas -->
+            <!-- My Routes Tab (Current functionality) -->
+            <div id="lukes-routes" class="tab-content active">
             <div class="route-controls">
                 <div class="filter-buttons">
                     <button class="filter-btn active" data-filter="all">All</button>
@@ -448,6 +510,72 @@
             
             <div class="routes-list" id="routesList">
                 <!-- Routes will be populated here -->
+            </div>
+            </div>
+
+            <!-- Discover Routes Tab (New functionality) -->
+            <div id="discover-routes" class="tab-content">
+                <div style="padding: 15px 0;">
+                    <h3 style="color: #60a5fa; margin-bottom: 15px; font-size: 1.1em;">🌍 Discover Epic Routes</h3>
+                    
+                    <!-- Search Bar -->
+                    <div style="margin-bottom: 15px;">
+                        <input type="text" placeholder="🔍 Search routes..." style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #374151; background: #1f2937; color: white; font-size: 14px;">
+                    </div>
+                    
+                    <!-- Route Categories -->
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="color: #94a3b8; margin-bottom: 10px; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px;">Route Categories</h4>
+                        <div class="route-category-buttons" style="display: flex; flex-direction: column; gap: 8px;">
+                            <button class="filter-btn category-btn active" data-category="featured" style="justify-content: flex-start; text-align: left;">
+                                ⭐ Featured Routes
+                            </button>
+                            <button class="filter-btn category-btn" data-category="eurovelo" style="justify-content: flex-start; text-align: left;">
+                                🏛️ EuroVelo Network
+                            </button>
+                            <button class="filter-btn category-btn" data-category="adventure-cycling" style="justify-content: flex-start; text-align: left;">
+                                🇺🇸 Adventure Cycling
+                            </button>
+                            <button class="filter-btn category-btn" data-category="community" style="justify-content: flex-start; text-align: left;">
+                                🌟 Community Favorites
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Filters -->
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="color: #94a3b8; margin-bottom: 10px; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px;">Filters</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+                            <label style="color: #94a3b8;">Distance (km)</label>
+                            <input type="range" min="0" max="5000" value="2500" style="width: 100%;">
+                            <label style="color: #94a3b8;">Difficulty</label>
+                            <select style="background: #374151; color: white; border: 1px solid #4b5563; border-radius: 4px; padding: 4px;">
+                                <option>Any</option>
+                                <option>Beginner</option>
+                                <option>Intermediate</option>
+                                <option>Expert</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Bucket List -->
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="color: #f59e0b; margin-bottom: 10px; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px;">⭐ My Bucket List</h4>
+                        <div id="bucketListCount" style="color: #94a3b8; font-size: 0.85em; font-style: italic;">
+                            No routes starred yet
+                        </div>
+                    </div>
+                    
+                    <!-- Discover Routes List -->
+                    <div id="discoverRoutesList" style="max-height: 400px; overflow-y: auto;">
+                        <!-- Coming soon message -->
+                        <div style="text-align: center; padding: 40px 20px; color: #94a3b8; font-style: italic;">
+                            <div style="font-size: 3em; margin-bottom: 10px;">🚀</div>
+                            <div>Route discovery coming soon!</div>
+                            <div style="font-size: 0.8em; margin-top: 8px;">EuroVelo, Adventure Cycling & Komoot integration</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -5133,6 +5261,40 @@
                     btn.classList.remove('active');
                 }
             });
+
+            // Tab switching functionality
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const targetTab = e.target.dataset.tab;
+                    switchToTab(targetTab);
+                });
+            });
+
+            // Discovery route category buttons
+            document.addEventListener('click', (e) => {
+                if (e.target.classList.contains('category-btn')) {
+                    // Update active category button
+                    document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('active'));
+                    e.target.classList.add('active');
+                    
+                    // Update filter and repopulate routes
+                    currentDiscoveryFilter = e.target.dataset.category;
+                    console.log(`🔍 Discovery filter changed to: ${currentDiscoveryFilter}`);
+                    populateDiscoveryRoutes();
+                }
+
+                // Star/unstar route button
+                if (e.target.classList.contains('star-btn')) {
+                    const routeId = e.target.dataset.routeId;
+                    starDiscoveryRoute(routeId);
+                }
+
+                // View route on globe button
+                if (e.target.classList.contains('view-route-btn')) {
+                    const routeId = e.target.dataset.routeId;
+                    viewDiscoveryRouteOnGlobe(routeId);
+                }
+            });
             
             // Filter buttons - ONLY for actual filter buttons with data-filter attribute
             document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
@@ -5254,6 +5416,423 @@
             }
             
             // Luke's head is now auto-loaded on startup - no manual buttons needed
+        }
+
+        // Tab switching functionality
+        function switchToTab(tabName) {
+            console.log(`🔄 Switching to tab: ${tabName}`);
+            
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                if (btn.dataset.tab === tabName) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                if (content.id === tabName) {
+                    content.classList.add('active');
+                } else {
+                    content.classList.remove('active');
+                }
+            });
+            
+            // Tab-specific logic
+            if (tabName === 'lukes-routes') {
+                // Show Luke's personal routes on globe
+                console.log('📍 Showing Luke\'s personal routes');
+                // Clear any discovery routes from globe
+                clearCurrentDiscoveryRoute();
+                
+            } else if (tabName === 'discover-routes') {
+                // Switch to route discovery mode
+                console.log('🌍 Switching to route discovery mode');
+                
+                // Populate discovery routes if not already done
+                populateDiscoveryRoutes();
+                updateBucketListCount();
+                
+                console.log('✅ Discovery mode activated');
+            }
+        }
+
+        // ROUTE DISCOVERY SYSTEM - Free Data Sources
+        
+        // EuroVelo Official Routes (Free via OpenStreetMap)
+        const EUROVELO_ROUTES = [
+            {
+                id: 'ev1',
+                name: 'EuroVelo 1 - Atlantic Coast Route',
+                source: 'eurovelo',
+                badge: '🏛️ Official EU Route',
+                distance: 11186, // km
+                countries: ['Norway', 'United Kingdom', 'Ireland', 'France', 'Spain', 'Portugal'],
+                difficulty: 'intermediate',
+                surface: '75% paved, 25% gravel',
+                description: 'Epic journey along Europe\'s Atlantic coastline from North Cape to Sagres',
+                highlights: ['Dramatic Norwegian fjords', 'Scottish Highlands', 'Galician coast', 'Portuguese beaches'],
+                bestMonths: ['May', 'June', 'July', 'August', 'September'],
+                website: 'https://en.eurovelo.com/ev1',
+                coordinates: [
+                    [25.7841, 71.1694], // North Cape, Norway
+                    [10.7522, 59.9139], // Oslo
+                    [-4.2206, 57.4778], // Scotland  
+                    [-9.1393, 53.3498], // Ireland
+                    [-1.5533, 47.2184], // France
+                    [-8.6291, 41.1579], // Portugal
+                    [-8.9756, 37.0179]  // Sagres, Portugal
+                ],
+                rating: 4.8,
+                reviews: 1247,
+                photos: ['https://images.unsplash.com/photo-1506905925346-21bda4d32df4', 'https://images.unsplash.com/photo-1551632811-561732d1e306']
+            },
+            {
+                id: 'ev6',
+                name: 'EuroVelo 6 - Rivers Route',
+                source: 'eurovelo',
+                badge: '🏛️ Official EU Route',
+                distance: 3653,
+                countries: ['France', 'Switzerland', 'Austria', 'Slovakia', 'Hungary', 'Croatia', 'Serbia', 'Bulgaria', 'Romania'],
+                difficulty: 'easy',
+                surface: '85% paved, 15% gravel',
+                description: 'Follow Europe\'s great rivers from Atlantic to Black Sea',
+                highlights: ['Loire Valley castles', 'Danube river path', 'Vienna to Budapest', 'Iron Gates gorge'],
+                bestMonths: ['April', 'May', 'June', 'September', 'October'],
+                website: 'https://en.eurovelo.com/ev6',
+                coordinates: [
+                    [-1.1794, 46.1603], // Atlantic coast, France
+                    [2.3522, 48.8566], // Paris
+                    [8.5417, 47.3769], // Switzerland
+                    [16.3738, 48.2082], // Vienna
+                    [19.0402, 47.4979], // Budapest
+                    [28.6348, 44.4268]  // Black Sea, Romania
+                ],
+                rating: 4.9,
+                reviews: 2847,
+                photos: ['https://images.unsplash.com/photo-1551632811-561732d1e306', 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4']
+            },
+            {
+                id: 'ev15',
+                name: 'EuroVelo 15 - Rhine Cycle Route',
+                source: 'eurovelo',
+                badge: '🏛️ Official EU Route',
+                distance: 1233,
+                countries: ['Switzerland', 'France', 'Germany', 'Netherlands'],
+                difficulty: 'easy',
+                surface: '95% paved',
+                description: 'Follow the Rhine from source to sea through the heart of Europe',
+                highlights: ['Rhine Falls', 'Romantic Rhine castles', 'Cologne Cathedral', 'Dutch windmills'],
+                bestMonths: ['April', 'May', 'June', 'July', 'August', 'September'],
+                website: 'https://en.eurovelo.com/ev15',
+                coordinates: [
+                    [8.6821, 46.6197], // Rhine source, Switzerland
+                    [7.7507, 48.5734], // Strasbourg
+                    [6.9603, 50.9375], // Cologne
+                    [4.9041, 52.3676]  // Amsterdam
+                ],
+                rating: 4.7,
+                reviews: 1834,
+                photos: ['https://images.unsplash.com/photo-1467269204594-9661b134dd2b', 'https://images.unsplash.com/photo-1551632811-561732d1e306']
+            }
+        ];
+
+        // Sample US Routes (RideWithGPS style data structure - ready for real API)
+        const SAMPLE_US_ROUTES = [
+            {
+                id: 'rwgps_1',
+                name: 'Pacific Coast Highway - Big Sur Section',
+                source: 'ridewithgps',
+                badge: '🌟 Community Favorite',
+                distance: 145,
+                location: 'California, USA',
+                difficulty: 'expert',
+                surface: '100% paved',
+                description: 'Iconic coastal ride through Big Sur with breathtaking ocean views',
+                highlights: ['McWay Falls', 'Bixby Creek Bridge', 'Hearst Castle', 'Elephant seals'],
+                bestMonths: ['April', 'May', 'September', 'October'],
+                coordinates: [
+                    [-121.8947, 36.6002], // Monterey
+                    [-121.9018, 36.5537], // Carmel
+                    [-121.8088, 36.2678], // Big Sur
+                    [-120.8759, 35.6870]  // San Simeon
+                ],
+                rating: 4.8,
+                reviews: 892,
+                photos: ['https://images.unsplash.com/photo-1506905925346-21bda4d32df4', 'https://images.unsplash.com/photo-1551632811-561732d1e306']
+            },
+            {
+                id: 'rwgps_2', 
+                name: 'Blue Ridge Parkway - Asheville Loop',
+                source: 'ridewithgps',
+                badge: '🌟 Community Favorite',
+                distance: 187,
+                location: 'North Carolina, USA',
+                difficulty: 'intermediate',
+                surface: '100% paved',
+                description: 'Mountain cycling through America\'s favorite drive',
+                highlights: ['Mount Mitchell', 'Grandfather Mountain', 'Fall foliage', 'Appalachian culture'],
+                bestMonths: ['April', 'May', 'June', 'September', 'October'],
+                coordinates: [
+                    [-82.5515, 35.5951], // Asheville
+                    [-82.2665, 35.7595], // Blue Ridge Parkway
+                    [-81.8754, 36.1059], // Grandfather Mountain
+                    [-82.5515, 35.5951]  // Back to Asheville
+                ],
+                rating: 4.6,
+                reviews: 634,
+                photos: ['https://images.unsplash.com/photo-1506905925346-21bda4d32df4', 'https://images.unsplash.com/photo-1551632811-561732d1e306']
+            }
+        ];
+
+        // Combine all discovery routes
+        let discoveryRoutes = [...EUROVELO_ROUTES, ...SAMPLE_US_ROUTES];
+        let bucketListRoutes = []; // Routes starred by user
+        let currentDiscoveryFilter = 'featured';
+        let currentDiscoveryRoute = null; // Currently selected discovery route on globe
+
+        // Discovery route functions
+        function populateDiscoveryRoutes() {
+            const routesList = document.getElementById('discoverRoutesList');
+            if (!routesList) return;
+
+            // Filter routes based on current category
+            let filteredRoutes = discoveryRoutes;
+            
+            if (currentDiscoveryFilter === 'eurovelo') {
+                filteredRoutes = discoveryRoutes.filter(r => r.source === 'eurovelo');
+            } else if (currentDiscoveryFilter === 'ridewithgps') {
+                filteredRoutes = discoveryRoutes.filter(r => r.source === 'ridewithgps');
+            }
+
+            // Clear existing content
+            routesList.innerHTML = '';
+
+            // Create route cards
+            filteredRoutes.forEach(route => {
+                const routeCard = createDiscoveryRouteCard(route);
+                routesList.appendChild(routeCard);
+            });
+
+            console.log(`🌍 Populated ${filteredRoutes.length} discovery routes for filter: ${currentDiscoveryFilter}`);
+        }
+
+        function createDiscoveryRouteCard(route) {
+            const card = document.createElement('div');
+            card.className = 'discovery-route-card';
+            card.style.cssText = `
+                background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+                border: 1px solid #334155;
+                border-radius: 8px;
+                margin-bottom: 12px;
+                padding: 15px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            `;
+
+            const isStarred = bucketListRoutes.some(r => r.id === route.id);
+            const starIcon = isStarred ? '⭐' : '☆';
+            const starColor = isStarred ? '#f59e0b' : '#6b7280';
+
+            card.innerHTML = `
+                <div style="display: flex; justify-content: between; align-items: flex-start; margin-bottom: 10px;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                            <span style="font-size: 12px; background: ${route.source === 'eurovelo' ? '#dc2626' : '#3b82f6'}; color: white; padding: 2px 6px; border-radius: 4px;">
+                                ${route.badge}
+                            </span>
+                        </div>
+                        <h4 style="color: white; font-size: 16px; margin: 0 0 8px 0; font-weight: 600;">${route.name}</h4>
+                        <div style="color: #94a3b8; font-size: 13px; line-height: 1.4;">
+                            📍 ${route.countries ? route.countries.join(', ') : route.location}<br>
+                            📏 ${route.distance.toLocaleString()} km • 
+                            🎯 ${route.difficulty} • 
+                            ⭐ ${route.rating}/5 (${route.reviews} reviews)
+                        </div>
+                    </div>
+                    <button class="star-btn" data-route-id="${route.id}" style="
+                        background: none;
+                        border: none;
+                        font-size: 20px;
+                        cursor: pointer;
+                        color: ${starColor};
+                        padding: 5px;
+                        border-radius: 4px;
+                        transition: all 0.2s ease;
+                    " onmouseover="this.style.background='rgba(59,130,246,0.1)'" onmouseout="this.style.background='none'">
+                        ${starIcon}
+                    </button>
+                </div>
+                <p style="color: #d1d5db; font-size: 14px; margin: 0 0 12px 0; line-height: 1.4;">
+                    ${route.description}
+                </p>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="view-route-btn" data-route-id="${route.id}" style="
+                        background: #3b82f6;
+                        color: white;
+                        border: none;
+                        padding: 8px 12px;
+                        border-radius: 5px;
+                        font-size: 13px;
+                        cursor: pointer;
+                        transition: all 0.2s ease;
+                    " onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
+                        👁️ View on Globe
+                    </button>
+                    <a href="${route.website || '#'}" target="_blank" style="
+                        background: #6b7280;
+                        color: white;
+                        text-decoration: none;
+                        padding: 8px 12px;
+                        border-radius: 5px;
+                        font-size: 13px;
+                        transition: all 0.2s ease;
+                    " onmouseover="this.style.background='#4b5563'" onmouseout="this.style.background='#6b7280'">
+                        🔗 Official Info
+                    </a>
+                </div>
+            `;
+
+            // Add hover effect to card
+            card.addEventListener('mouseover', () => {
+                card.style.background = 'linear-gradient(135deg, #334155 0%, #1e293b 100%)';
+                card.style.transform = 'translateY(-2px)';
+            });
+            
+            card.addEventListener('mouseout', () => {
+                card.style.background = 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)';
+                card.style.transform = 'translateY(0)';
+            });
+
+            return card;
+        }
+
+        function starDiscoveryRoute(routeId) {
+            const route = discoveryRoutes.find(r => r.id === routeId);
+            if (!route) return;
+
+            const isCurrentlyStarred = bucketListRoutes.some(r => r.id === routeId);
+            
+            if (isCurrentlyStarred) {
+                // Remove from bucket list
+                bucketListRoutes = bucketListRoutes.filter(r => r.id !== routeId);
+                console.log(`⭐ Removed route from bucket list: ${route.name}`);
+            } else {
+                // Add to bucket list
+                bucketListRoutes.push(route);
+                console.log(`⭐ Added route to bucket list: ${route.name}`);
+            }
+
+            // Update bucket list count
+            updateBucketListCount();
+            
+            // Refresh the route cards to update star states
+            populateDiscoveryRoutes();
+        }
+
+        function updateBucketListCount() {
+            const countElement = document.getElementById('bucketListCount');
+            if (countElement) {
+                const count = bucketListRoutes.length;
+                countElement.textContent = count > 0 ? `${count} route${count > 1 ? 's' : ''} starred` : 'No routes starred yet';
+            }
+        }
+
+        function viewDiscoveryRouteOnGlobe(routeId) {
+            const route = discoveryRoutes.find(r => r.id === routeId);
+            if (!route || !viewer) return;
+
+            console.log(`🌍 Viewing discovery route on globe: ${route.name}`);
+            
+            // Clear any existing discovery route
+            clearCurrentDiscoveryRoute();
+            
+            // Store current route
+            currentDiscoveryRoute = route;
+            
+            // Fly camera to route bounds
+            const positions = route.coordinates.map(coord => 
+                Cesium.Cartesian3.fromDegrees(coord[0], coord[1])
+            );
+            
+            viewer.camera.flyTo({
+                destination: Cesium.BoundingSphere.fromPoints(positions)
+            });
+            
+            // Draw route line on globe
+            const routeEntity = viewer.entities.add({
+                name: `discovery-route-${route.id}`,
+                polyline: {
+                    positions: Cesium.Cartesian3.fromDegreesArray(route.coordinates.flat()),
+                    width: 8,
+                    material: route.source === 'eurovelo' ? Cesium.Color.RED : Cesium.Color.DODGERBLUE,
+                    clampToGround: true,
+                    classificationType: Cesium.ClassificationType.TERRAIN
+                }
+            });
+
+            // Add start and end markers
+            const startCoord = route.coordinates[0];
+            const endCoord = route.coordinates[route.coordinates.length - 1];
+            
+            viewer.entities.add({
+                name: `discovery-start-${route.id}`,
+                position: Cesium.Cartesian3.fromDegrees(startCoord[0], startCoord[1]),
+                billboard: {
+                    image: '🏁',
+                    scale: 1.5,
+                    heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                },
+                label: {
+                    text: 'START',
+                    font: '12pt sans-serif',
+                    fillColor: Cesium.Color.WHITE,
+                    outlineColor: Cesium.Color.BLACK,
+                    outlineWidth: 2,
+                    pixelOffset: new Cesium.Cartesian2(0, -50)
+                }
+            });
+
+            viewer.entities.add({
+                name: `discovery-end-${route.id}`,
+                position: Cesium.Cartesian3.fromDegrees(endCoord[0], endCoord[1]),
+                billboard: {
+                    image: '🏆',
+                    scale: 1.5,
+                    heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                },
+                label: {
+                    text: 'FINISH',
+                    font: '12pt sans-serif',
+                    fillColor: Cesium.Color.WHITE,
+                    outlineColor: Cesium.Color.BLACK,
+                    outlineWidth: 2,
+                    pixelOffset: new Cesium.Cartesian2(0, -50)
+                }
+            });
+
+            console.log(`✅ Discovery route displayed on globe: ${route.name}`);
+        }
+
+        function clearCurrentDiscoveryRoute() {
+            if (!viewer || !currentDiscoveryRoute) return;
+            
+            // Remove all entities related to current discovery route
+            const entitiesToRemove = [];
+            viewer.entities.values.forEach(entity => {
+                if (entity.name && (
+                    entity.name.startsWith(`discovery-route-${currentDiscoveryRoute.id}`) ||
+                    entity.name.startsWith(`discovery-start-${currentDiscoveryRoute.id}`) ||
+                    entity.name.startsWith(`discovery-end-${currentDiscoveryRoute.id}`)
+                )) {
+                    entitiesToRemove.push(entity);
+                }
+            });
+            
+            entitiesToRemove.forEach(entity => viewer.entities.remove(entity));
+            currentDiscoveryRoute = null;
         }
 
         // Duplicate StravaAPI class removed - using the full implementation above
