@@ -399,10 +399,7 @@
                 </div>
                 
                 <div class="toggle-routes" style="margin: 10px 0; text-align: center;">
-                    <button id="toggleRoutesBtn" class="filter-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); width: 100%; margin-bottom: 5px;">
-                        🌍 Show All Routes on Globe
-                    </button>
-                    <button id="toggleZwiftBtn" class="filter-btn" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); width: 100%; font-size: 12px;">
+                    <button id="toggleZwiftBtn" class="filter-btn" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); width: 100%; font-size: 14px;">
                         🏠 Show Zwift Routes (Indoor)
                     </button>
                 </div>
@@ -2306,15 +2303,8 @@
                 createClusterMarkers();
                 setupCameraListeners();
                 
-                // Automatically show all routes on globe for browsing
-                displayAllRoutes();
-                
-                // Update toggle button to reflect that routes are shown
-                const toggleBtn = document.getElementById('toggleRoutesBtn');
-                if (toggleBtn) {
-                    toggleBtn.textContent = '🌍 Hide Routes from Globe';
-                    toggleBtn.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
-                }
+                // Start with cluster markers only - no automatic route display
+                // Routes can be viewed by clicking cluster markers or using animation
             }, 1000);
         }
         
@@ -3922,18 +3912,49 @@
             const celebrationDance = setInterval(() => {
                 celebrationFrame++;
                 
-                // SHARP celebration: Quick left-right-left-right head shaking (like dancing)
-                // Create sharp transitions instead of smooth sine wave
-                const shakeSpeed = celebrationFrame * 0.4; // How fast the head shakes
-                const shakeDirection = Math.floor(shakeSpeed) % 2; // 0 or 1 (left or right)
-                const quickHeadShake = shakeDirection === 0 ? -0.4 : 0.4; // Sharp left (-) or right (+) tilt
+                // SMOOTH celebration: Fast but smooth sinusoidal head tilting (like dancing)
+                // Create smooth left-right tilting motion that's fast but fluid
+                const fastTiltSpeed = celebrationFrame * 0.8; // Faster tilting frequency 
+                const smoothHeadTilt = Math.sin(fastTiltSpeed) * 0.5; // Smooth sine wave with 0.5 max rotation
                 
                 // Luke stays in EXACT same position - only head rotation changes
                 if (lukeHeadEntity.billboard) {
-                    lukeHeadEntity.billboard.rotation = quickHeadShake; // Sharp left/right head shake only
+                    lukeHeadEntity.billboard.rotation = smoothHeadTilt; // Smooth sinusoidal head tilting
                 }
                 
-                // Celebration sparkles removed - Luke stays in exact same position
+                // Add confetti particles for celebration (every few frames)
+                if (celebrationFrame % 3 === 0) { // Create confetti every 3 frames for performance
+                    try {
+                        // Create multiple confetti particles in a burst
+                        for (let i = 0; i < 2; i++) {
+                            const confetti = viewer.entities.add({
+                                position: Cesium.Cartesian3.fromRadians(
+                                    // Random positions around Luke's head
+                                    lukeHeadEntity.position.getValue(viewer.clock.currentTime).longitude + (Math.random() - 0.5) * 0.01,
+                                    lukeHeadEntity.position.getValue(viewer.clock.currentTime).latitude + (Math.random() - 0.5) * 0.01,
+                                    lukeHeadEntity.position.getValue(viewer.clock.currentTime).height + Math.random() * 100000
+                                ),
+                                point: {
+                                    pixelSize: 8,
+                                    color: [Cesium.Color.GOLD, Cesium.Color.ORANGE, Cesium.Color.RED, 
+                                           Cesium.Color.PURPLE, Cesium.Color.LIME, Cesium.Color.CYAN][Math.floor(Math.random() * 6)],
+                                    outlineColor: Cesium.Color.WHITE,
+                                    outlineWidth: 2
+                                }
+                            });
+                            
+                            // Auto-remove confetti after 2 seconds
+                            setTimeout(() => {
+                                if (viewer.entities.contains(confetti)) {
+                                    viewer.entities.remove(confetti);
+                                }
+                            }, 2000);
+                        }
+                    } catch (e) {
+                        // Ignore confetti errors to prevent breaking celebration
+                        console.warn('⚠️ Confetti creation error (non-critical):', e.message);
+                    }
+                }
                 
                 viewer.scene.requestRender();
                 
@@ -4126,22 +4147,7 @@
                 }
             });
             
-            // Toggle routes button event listener
-            const toggleRoutesBtn = document.getElementById('toggleRoutesBtn');
-            if (toggleRoutesBtn) {
-                toggleRoutesBtn.addEventListener('click', () => {
-                    toggleAllRoutesDisplay();
-                    
-                    // Update button text and style
-                    if (showAllRoutes) {
-                        toggleRoutesBtn.textContent = '🌍 Hide Routes from Globe';
-                        toggleRoutesBtn.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
-                    } else {
-                        toggleRoutesBtn.textContent = '🌍 Show All Routes on Globe';
-                        toggleRoutesBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-                    }
-                });
-            }
+            // Show All Routes button removed per user request - only need Zwift toggle
             
             // Zwift routes toggle button
             const toggleZwiftBtn = document.getElementById('toggleZwiftBtn');
@@ -4161,6 +4167,9 @@
                     // Update route visibility on map and in sidebar
                     updatePermanentRouteVisibility();
                     populateRoutesList();
+                    
+                    // CRITICAL: Refresh cluster markers to respect Zwift filtering
+                    createClusterMarkers();
                     
                     console.log(`🏠 Zwift routes ${showZwiftRoutes ? 'SHOWN' : 'HIDDEN'} - Button updated`);
                     
