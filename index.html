@@ -5752,75 +5752,103 @@
             // Store current route
             currentDiscoveryRoute = route;
             
-            // Fly camera to route bounds
-            const positions = route.coordinates.map(coord => 
-                Cesium.Cartesian3.fromDegrees(coord[0], coord[1])
-            );
+            // Validate coordinates
+            if (!route.coordinates || route.coordinates.length < 2) {
+                console.error('❌ Invalid route coordinates');
+                return;
+            }
             
-            viewer.camera.flyTo({
-                destination: Cesium.BoundingSphere.fromPoints(positions)
-            });
-            
-            // Draw route line on globe
-            // Convert coordinates array to flat longitude, latitude array
-            const flatCoordinates = [];
-            route.coordinates.forEach(coord => {
-                flatCoordinates.push(coord[0]); // longitude
-                flatCoordinates.push(coord[1]); // latitude
-            });
-            
-            const routeEntity = viewer.entities.add({
-                name: `discovery-route-${route.id}`,
-                polyline: {
-                    positions: Cesium.Cartesian3.fromDegreesArray(flatCoordinates),
-                    width: 8,
-                    material: route.source === 'eurovelo' ? Cesium.Color.RED : Cesium.Color.DODGERBLUE,
-                    clampToGround: true,
-                    classificationType: Cesium.ClassificationType.TERRAIN
+            // Draw route line on globe first
+            try {
+                // Convert coordinates array to flat longitude, latitude array
+                const flatCoordinates = [];
+                route.coordinates.forEach(coord => {
+                    if (Array.isArray(coord) && coord.length >= 2) {
+                        flatCoordinates.push(coord[0]); // longitude
+                        flatCoordinates.push(coord[1]); // latitude
+                    }
+                });
+                
+                if (flatCoordinates.length < 4) { // Need at least 2 points (4 values)
+                    console.error('❌ Not enough valid coordinates');
+                    return;
                 }
-            });
+                
+                const routeEntity = viewer.entities.add({
+                    name: `discovery-route-${route.id}`,
+                    polyline: {
+                        positions: Cesium.Cartesian3.fromDegreesArray(flatCoordinates),
+                        width: 8,
+                        material: route.source === 'eurovelo' ? Cesium.Color.RED : Cesium.Color.DODGERBLUE,
+                        clampToGround: true,
+                        classificationType: Cesium.ClassificationType.TERRAIN
+                    }
+                });
 
-            // Add start and end markers
-            const startCoord = route.coordinates[0];
-            const endCoord = route.coordinates[route.coordinates.length - 1];
-            
-            viewer.entities.add({
-                name: `discovery-start-${route.id}`,
-                position: Cesium.Cartesian3.fromDegrees(startCoord[0], startCoord[1]),
-                billboard: {
-                    image: '🏁',
-                    scale: 1.5,
-                    heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
-                },
-                label: {
-                    text: 'START',
-                    font: '12pt sans-serif',
-                    fillColor: Cesium.Color.WHITE,
-                    outlineColor: Cesium.Color.BLACK,
-                    outlineWidth: 2,
-                    pixelOffset: new Cesium.Cartesian2(0, -50)
-                }
-            });
+                // Add simple start and end markers (no emoji billboards)
+                const startCoord = route.coordinates[0];
+                const endCoord = route.coordinates[route.coordinates.length - 1];
+                
+                viewer.entities.add({
+                    name: `discovery-start-${route.id}`,
+                    position: Cesium.Cartesian3.fromDegrees(startCoord[0], startCoord[1]),
+                    point: {
+                        pixelSize: 15,
+                        color: Cesium.Color.LIME,
+                        outlineColor: Cesium.Color.BLACK,
+                        outlineWidth: 2,
+                        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                    },
+                    label: {
+                        text: 'START',
+                        font: '14pt sans-serif',
+                        fillColor: Cesium.Color.WHITE,
+                        outlineColor: Cesium.Color.BLACK,
+                        outlineWidth: 2,
+                        pixelOffset: new Cesium.Cartesian2(0, -30)
+                    }
+                });
 
-            viewer.entities.add({
-                name: `discovery-end-${route.id}`,
-                position: Cesium.Cartesian3.fromDegrees(endCoord[0], endCoord[1]),
-                billboard: {
-                    image: '🏆',
-                    scale: 1.5,
-                    heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
-                },
-                label: {
-                    text: 'FINISH',
-                    font: '12pt sans-serif',
-                    fillColor: Cesium.Color.WHITE,
-                    outlineColor: Cesium.Color.BLACK,
-                    outlineWidth: 2,
-                    pixelOffset: new Cesium.Cartesian2(0, -50)
-                }
-            });
+                viewer.entities.add({
+                    name: `discovery-end-${route.id}`,
+                    position: Cesium.Cartesian3.fromDegrees(endCoord[0], endCoord[1]),
+                    point: {
+                        pixelSize: 15,
+                        color: Cesium.Color.RED,
+                        outlineColor: Cesium.Color.BLACK,
+                        outlineWidth: 2,
+                        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                    },
+                    label: {
+                        text: 'FINISH',
+                        font: '14pt sans-serif',
+                        fillColor: Cesium.Color.WHITE,
+                        outlineColor: Cesium.Color.BLACK,
+                        outlineWidth: 2,
+                        pixelOffset: new Cesium.Cartesian2(0, -30)
+                    }
+                });
+                
+                // Fly camera to route bounds using a simple approach
+                const centerLon = (startCoord[0] + endCoord[0]) / 2;
+                const centerLat = (startCoord[1] + endCoord[1]) / 2;
+                
+                // Calculate a reasonable height based on route span
+                const lonSpan = Math.abs(endCoord[0] - startCoord[0]);
+                const latSpan = Math.abs(endCoord[1] - startCoord[1]);
+                const maxSpan = Math.max(lonSpan, latSpan);
+                const height = Math.max(1000000, maxSpan * 200000); // Minimum 1000km altitude
+                
+                viewer.camera.flyTo({
+                    destination: Cesium.Cartesian3.fromDegrees(centerLon, centerLat, height),
+                    duration: 2.0
+                });
 
-            console.log(`✅ Discovery route displayed on globe: ${route.name}`);
+                console.log(`✅ Discovery route displayed on globe: ${route.name}`);
+                
+            } catch (error) {
+                console.error('❌ Error displaying route on globe:', error);
+            }
         }
 
         function clearCurrentDiscoveryRoute() {
