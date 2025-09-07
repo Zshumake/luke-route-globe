@@ -495,7 +495,7 @@
             
             let detectedReason = null;
             
-            // PRIORITY 1: Use Strava's most reliable indoor indicators
+            // 🚨 ENHANCED: More comprehensive Strava-based virtual ride detection
             if (route.trainer === true) {
                 detectedReason = 'Strava trainer flag (most reliable)';
             } else if (route.sport_type === 'VirtualRide') {
@@ -510,6 +510,12 @@
                 detectedReason = 'Zwift mentioned in description';
             } else if (route.description?.toLowerCase().includes('indoor')) {
                 detectedReason = 'Indoor mentioned in description';
+            } 
+            // 🔍 NEW: Additional detection patterns for missed virtual rides
+            else if (route.distance > 0 && (!route.coordinates || route.coordinates.length === 0)) {
+                detectedReason = 'Distance recorded but no GPS data (indoor activity)';
+            } else if (route.commute === false && route.manual === false && (!route.coordinates || route.coordinates.length === 0)) {
+                detectedReason = 'Non-commute activity without GPS (likely virtual)';
             }
             
             // PRIORITY 2: Only if Strava fields don't give a definitive answer, check name patterns
@@ -526,11 +532,16 @@
                     'richmond', 'london', 'innsbruck', 'yorkshire', 'france', 'paris', 'new york'
                 ];
                 
-                // Zwift-specific activity patterns (made more specific)
+                // 🚨 ENHANCED: More comprehensive Zwift-specific activity patterns
                 const zwiftPatterns = [
                     'group workout', 'structured workout', 'free ride',
                     'climb portal', 'alpe du', 'epic kom',
-                    'min workout', 'workout on', 'workout in' // Zwift format: "30 Min Workout on..."
+                    'min workout', 'workout on', 'workout in', // Zwift format: "30 Min Workout on..."
+                    'group ride', 'pace partner', 'meet up', 
+                    'race', 'racing', 'fondo', 'tour de', 'stage',
+                    'interval', 'endurance', 'tempo', 'sweet spot',
+                    'ftp', 'threshold', 'vo2', 'recovery ride',
+                    'warm up', 'cool down', 'spin up', 'ramp test'
                 ];
                 
                 // Check for virtual Zwift worlds (always Zwift)
@@ -1649,7 +1660,8 @@
                 
                 // Now check if authenticated (after potentially processing callback)
                 if (!stravaAPI.isAuthenticated()) {
-                    console.log('⚠️ Not authenticated with Strava - showing sample data');
+                    console.log('📋 Not authenticated with Strava - showing sample data for demonstration');
+                    console.log('🔗 Users can click "Connect to Strava" to load their real routes');
                     return generateSampleRoutes();
                 }
                 
@@ -1715,13 +1727,15 @@
                             await new Promise(resolve => setTimeout(resolve, 200));
                         }
                     } catch (pageError) {
-                        console.error(`❌ Error loading page ${page}:`, pageError);
+                        console.warn(`⚠️ Could not load page ${page}:`, pageError.message);
                         hasMorePages = false;
                         
-                        // If it's an auth error, clear tokens
-                        if (pageError.message.includes('token expired') || pageError.message.includes('401')) {
-                            console.log('🔄 Token expired, clearing authentication...');
+                        // If it's an auth error, handle gracefully
+                        if (pageError.message.includes('token expired') || pageError.message.includes('401') || pageError.message.includes('Not authenticated')) {
+                            console.log('🔄 Authentication needed - user can connect via button');
                             stravaAPI.clearTokens();
+                            // Don't throw error - just return empty activities list for graceful fallback
+                            break;
                         }
                     }
                 }
@@ -2009,13 +2023,15 @@
                 
                 let terrainProvider;
                 try {
-                    // Try using your specific Asset ID 1 directly
+                    // 🚨 FIX: Try Ion Asset ID 1 but with better error handling
+                    console.log('🔧 IMPROVED: Trying Ion terrain with robust fallback...');
                     terrainProvider = await Cesium.CesiumTerrainProvider.fromIonAssetId(1);
                     console.log('✅ Debug: Ion Asset ID 1 terrain loaded successfully');
                 } catch (terrainError) {
-                    console.warn('⚠️ Asset ID 1 terrain failed, using ellipsoid terrain:', terrainError.message);
-                    // Fallback to basic ellipsoid terrain (no 3D features but works)
+                    console.warn('⚠️ Ion terrain failed (404 endpoint common), using ellipsoid:', terrainError.message);
+                    // 🚨 FIX: Use ellipsoid terrain immediately when Ion fails (prevents crashes)
                     terrainProvider = new Cesium.EllipsoidTerrainProvider();
+                    console.log('🔧 FIXED: Using ellipsoid terrain provider (reliable fallback)');
                 }
                 
                 viewer = new Cesium.Viewer('cesiumContainer', {
@@ -2063,17 +2079,23 @@
                     console.log('🔍 Debug: Layer 0 alpha:', layer0.alpha);
                     console.log('🔍 Debug: Layer 0 show:', layer0.show);
                 } else {
-                    console.error('❌ CRITICAL ISSUE: Imagery provider loaded but NOT in viewer layers!');
-                    console.log('🔧 FIXING: Manually adding Asset ID 3 to viewer...');
+                    console.warn('⚠️ No imagery layers detected - manually adding provider...');
+                    console.log('🔧 FIXING: Adding imagery provider to viewer layers...');
                     
-                    // The imagery provider exists but wasn't added to the viewer - fix this
+                    // Manually add the imagery provider to viewer layers
                     try {
-                        const fixImageryProvider = await Cesium.IonImageryProvider.fromAssetId(3, {
-                            maximumLevel: 20
-                        });
-                        const fixLayer = viewer.scene.imageryLayers.addImageryProvider(fixImageryProvider);
-                        console.log('✅ FIXED: Asset ID 3 manually added to viewer');
-                        console.log('🔍 Fixed layers count:', viewer.scene.imageryLayers.length);
+                        if (imageryProvider) {
+                            const addedLayer = viewer.scene.imageryLayers.addImageryProvider(imageryProvider);
+                            console.log('✅ FIXED: Imagery provider manually added to viewer');
+                            console.log('🔍 Fixed layers count:', viewer.scene.imageryLayers.length);
+                        } else {
+                            // Last resort: Add OpenStreetMap
+                            const osmProvider = new Cesium.OpenStreetMapImageryProvider({
+                                url: 'https://tile.openstreetmap.org/'
+                            });
+                            const osmLayer = viewer.scene.imageryLayers.addImageryProvider(osmProvider);
+                            console.log('🗺️ FALLBACK: Added OpenStreetMap as imagery provider');
+                        }
                         viewer.scene.requestRender();
                     } catch (fixError) {
                         console.error('❌ Fix failed:', fixError.message);
@@ -2562,7 +2584,10 @@
                         verticalOrigin: Cesium.VerticalOrigin.CENTER,
                         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
                         disableDepthTestDistance: 100000,
-                        show: true // Start visible
+                        show: true, // Start visible
+                        // 🚨 FIXED: Add proper scaling to persistent markers too
+                        scaleByDistance: new Cesium.NearFarScalar(500, 2.0, 20000000, 0.6), // Bigger when close, visible when far
+                        translucencyByDistance: new Cesium.NearFarScalar(1000, 1.0, 25000000, 0.8) // Stay visible much longer
                     }
                 });
                 
@@ -2630,10 +2655,19 @@
             console.log(`👁️ VISIBILITY: ${visibleCount} shown, ${hiddenCount} hidden in ${zoomLevel} level`);
         }
         
-        // Determine if marker should be visible based on current filters
+        // 🚨 ENHANCED: Determine if marker should be visible with detailed debugging
         function shouldMarkerBeVisible(marker) {
+            // Debug info for first few markers during Zwift toggles
+            const debugThisMarker = Math.random() < 0.1; // 10% sampling for debug
+            
+            if (debugThisMarker) {
+                console.log(`🔍 MARKER DEBUG: isZwift=${marker.isZwift}, showZwiftRoutes=${showZwiftRoutes}, currentFilter=${currentFilter}`);
+                console.log(`🔍 MARKER ROUTES:`, marker.routes.map(r => ({ name: r.name, type: r.type, isZwift: isZwiftRoute(r) })));
+            }
+            
             // Apply Zwift filter
             if (marker.isZwift && !showZwiftRoutes) {
+                if (debugThisMarker) console.log(`🔍 HIDDEN: Zwift marker when showZwiftRoutes=false`);
                 return false;
             }
             
@@ -2641,10 +2675,12 @@
             if (currentFilter !== 'all') {
                 const matchingRoutes = marker.routes.filter(route => route.type === currentFilter);
                 if (matchingRoutes.length === 0) {
+                    if (debugThisMarker) console.log(`🔍 HIDDEN: No routes match filter ${currentFilter}`);
                     return false;
                 }
             }
             
+            if (debugThisMarker) console.log(`🔍 VISIBLE: Marker passes all filters`);
             return true;
         }
         
@@ -2756,8 +2792,9 @@
                         verticalOrigin: Cesium.VerticalOrigin.CENTER, // Center for better balance
                         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
                         disableDepthTestDistance: 100000, // Always visible when close
-                        scaleByDistance: new Cesium.NearFarScalar(1000, 1.2, 20000000, 0.3), // Professional scaling
-                        translucencyByDistance: new Cesium.NearFarScalar(1000, 1.0, 15000000, 0.6) // Fade with distance
+                        // 🚨 FIXED: Better marker scaling - smaller far scale, larger close scale
+                        scaleByDistance: new Cesium.NearFarScalar(500, 2.0, 20000000, 0.6), // Bigger when close, larger when far
+                        translucencyByDistance: new Cesium.NearFarScalar(1000, 1.0, 25000000, 0.8) // Stay visible much longer
                     }
                 });
                 
@@ -2782,8 +2819,8 @@
                             return shouldInclude;
                         });
                         
-                        // If we should have markers but don't, recreate them
-                        if (currentHeight > 1000000 && clusterMarkers.length === 0 && visibleRoutes.length > 0) {
+                        // 🚨 FIXED: Lower altitude threshold so markers stay visible when zooming in
+                        if (currentHeight > 50000 && clusterMarkers.length === 0 && visibleRoutes.length > 0) {
                             console.log('🚑 MARKER RECOVERY: No markers found when they should exist - recreating...');
                             createClusterMarkers();
                         }
@@ -5150,11 +5187,13 @@
                     updatePermanentRouteVisibility();
                     populateRoutesList();
                     
-                    // NEW ARCHITECTURE: Update marker visibility instead of recreating
-                    console.log('🏠 ZWIFT TOGGLE: Updating marker visibility');
+                    // 🚨 ZWIFT TOGGLE DEBUG: Enhanced logging to debug vanishing markers
+                    console.log('🏠 ZWIFT TOGGLE CLICKED: showZwiftRoutes =', showZwiftRoutes);
+                    console.log('🏠 TOTAL ZOOM LEVELS:', ZOOM_LEVEL_MARKERS.size);
                     
                     // Update visibility for all zoom levels instantly
                     ZOOM_LEVEL_MARKERS.forEach((markers, zoomLevel) => {
+                        console.log(`🏠 Updating ${markers.size} markers in ${zoomLevel} level`);
                         updateMarkerVisibility(zoomLevel);
                     });
                     
