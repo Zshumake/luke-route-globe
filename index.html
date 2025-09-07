@@ -3404,8 +3404,19 @@
                                 });
                                 worldDistanceEntities.push(window.currentProgressiveLine);
                             } else if (window.currentProgressiveLine && progressiveLinePositions.length > 1) {
-                                // Update existing line positions (smooth elongation)
-                                window.currentProgressiveLine.polyline.positions = progressiveLinePositions;
+                                // Update existing line positions (smooth elongation) with safety check
+                                try {
+                                    // Validate positions array before updating
+                                    const validPositions = progressiveLinePositions.filter(pos => 
+                                        pos && !isNaN(pos.x) && !isNaN(pos.y) && !isNaN(pos.z)
+                                    );
+                                    
+                                    if (validPositions.length >= 2) {
+                                        window.currentProgressiveLine.polyline.positions = validPositions;
+                                    }
+                                } catch (lineError) {
+                                    console.warn('⚠️ Progressive line update error:', lineError.message);
+                                }
                             }
                             
                             // 2. MOVE LUKE'S HEAD along the line
@@ -3938,6 +3949,9 @@
             console.log('🎉 Starting Luke\'s victory celebration dance!');
             
             let celebrationFrame = 0;
+            let confettiCount = 0; // Track confetti to prevent excessive entity creation
+            const MAX_CONFETTI = 20; // Limit confetti to prevent rendering issues
+            
             const celebrationDance = setInterval(() => {
                 celebrationFrame++;
                 
@@ -3951,18 +3965,39 @@
                     lukeHeadEntity.billboard.rotation = smoothHeadTilt; // Smooth sinusoidal head tilting
                 }
                 
-                // Add confetti particles for celebration (every few frames)
-                if (celebrationFrame % 3 === 0) { // Create confetti every 3 frames for performance
+                // Add confetti particles for celebration (every few frames, with limit)
+                if (celebrationFrame % 3 === 0 && confettiCount < MAX_CONFETTI) { // Create confetti every 3 frames for performance
                     try {
                         // Create multiple confetti particles in a burst
                         for (let i = 0; i < 2; i++) {
                             const confetti = viewer.entities.add({
-                                position: Cesium.Cartesian3.fromRadians(
-                                    // Random positions around Luke's head
-                                    lukeHeadEntity.position.getValue(viewer.clock.currentTime).longitude + (Math.random() - 0.5) * 0.01,
-                                    lukeHeadEntity.position.getValue(viewer.clock.currentTime).latitude + (Math.random() - 0.5) * 0.01,
-                                    lukeHeadEntity.position.getValue(viewer.clock.currentTime).height + Math.random() * 100000
-                                ),
+                                position: (() => {
+                                    try {
+                                        // Get Luke's current position safely
+                                        const lukePosition = lukeHeadEntity.position.getValue(viewer.clock.currentTime);
+                                        if (!lukePosition) {
+                                            // Fallback to a safe default position if Luke's position is invalid
+                                            return Cesium.Cartesian3.fromDegrees(0, 0, 1000000);
+                                        }
+                                        
+                                        // Convert Cartesian3 to Cartographic properly
+                                        const cartographic = Cesium.Cartographic.fromCartesian(lukePosition);
+                                        const randomOffsetLon = (Math.random() - 0.5) * 0.01; // Small random offset
+                                        const randomOffsetLat = (Math.random() - 0.5) * 0.01;
+                                        const randomHeight = Math.random() * 100000;
+                                        
+                                        // Create confetti position with proper coordinate conversion
+                                        return Cesium.Cartesian3.fromRadians(
+                                            cartographic.longitude + randomOffsetLon,
+                                            cartographic.latitude + randomOffsetLat,
+                                            cartographic.height + randomHeight
+                                        );
+                                    } catch (coordinateError) {
+                                        // Fallback to safe position if any coordinate conversion fails
+                                        console.warn('⚠️ Confetti coordinate error:', coordinateError.message);
+                                        return Cesium.Cartesian3.fromDegrees(0, 0, 1000000);
+                                    }
+                                })(),
                                 point: {
                                     pixelSize: 8,
                                     color: [Cesium.Color.GOLD, Cesium.Color.ORANGE, Cesium.Color.RED, 
@@ -3972,10 +4007,13 @@
                                 }
                             });
                             
+                            confettiCount++; // Increment confetti counter
+                            
                             // Auto-remove confetti after 2 seconds
                             setTimeout(() => {
                                 if (viewer.entities.contains(confetti)) {
                                     viewer.entities.remove(confetti);
+                                    confettiCount--; // Decrement when removed
                                 }
                             }, 2000);
                         }
