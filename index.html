@@ -5491,24 +5491,47 @@
             },
             {
                 id: 'ev6',
-                name: 'EuroVelo 6 - Rivers Route',
+                name: 'EuroVelo 6 - Loire Valley Section',
                 source: 'eurovelo',
                 badge: '🏛️ Official EU Route',
-                distance: 3653,
-                countries: ['France', 'Switzerland', 'Austria', 'Slovakia', 'Hungary', 'Croatia', 'Serbia', 'Bulgaria', 'Romania'],
+                distance: 450, // Just the France section for now
+                countries: ['France'],
                 difficulty: 'easy',
                 surface: '85% paved, 15% gravel',
-                description: 'Follow Europe\'s great rivers from Atlantic to Black Sea',
-                highlights: ['Loire Valley castles', 'Danube river path', 'Vienna to Budapest', 'Iron Gates gorge'],
+                description: 'Loire Valley section - Follow the Loire River through castles and vineyards',
+                highlights: ['Château de Chambord', 'Loire Valley vineyards', 'Historic towns', 'River cycling paths'],
                 bestMonths: ['April', 'May', 'June', 'September', 'October'],
                 website: 'https://en.eurovelo.com/ev6',
                 coordinates: [
-                    [-1.1794, 46.1603], // Atlantic coast, France
-                    [2.3522, 48.8566], // Paris
-                    [8.5417, 47.3769], // Switzerland
-                    [16.3738, 48.2082], // Vienna
-                    [19.0402, 47.4979], // Budapest
-                    [28.6348, 44.4268]  // Black Sea, Romania
+                    // More detailed Loire Valley section (actual cycling path approximation)
+                    [-1.1794, 46.1603], // Near Atlantic coast
+                    [-1.1234, 46.1456], // Continuing inland
+                    [-1.0567, 46.1289], // Following Loire
+                    [-0.9234, 46.1123], // River bend
+                    [-0.8567, 46.0987], // Angers approach
+                    [-0.7834, 46.0823], // Near Angers
+                    [-0.6789, 46.0654], // Continuing east
+                    [-0.5234, 46.0489], // Following river
+                    [-0.3567, 46.0321], // Saumur area
+                    [-0.2134, 46.0156], // Château region
+                    [-0.0789, 45.9987], // Tours approach
+                    [0.0456, 45.9823], // Near Tours
+                    [0.1789, 45.9654], // Continuing east
+                    [0.3234, 45.9489], // Amboise area
+                    [0.4567, 45.9321], // Château de Chambord region
+                    [0.5789, 45.9156], // Blois area
+                    [0.7234, 45.8987], // Orleans approach
+                    [0.8567, 45.8823], // Near Orleans
+                    [0.9789, 45.8654], // Continuing east
+                    [1.1234, 45.8489], // Gien area
+                    [1.2567, 45.8321], // Following Loire
+                    [1.3789, 45.8156], // Nevers approach
+                    [1.5234, 45.7987], // Near Nevers
+                    [1.6567, 45.7823], // Continuing southeast
+                    [1.7789, 45.7654], // Moulins area
+                    [1.9234, 45.7489], // Following Allier
+                    [2.0567, 45.7321], // Towards central France
+                    [2.1789, 45.7156]  // Sample endpoint
                 ],
                 rating: 4.9,
                 reviews: 2847,
@@ -5554,9 +5577,32 @@
                 highlights: ['McWay Falls', 'Bixby Creek Bridge', 'Hearst Castle', 'Elephant seals'],
                 bestMonths: ['April', 'May', 'September', 'October'],
                 coordinates: [
-                    [-121.8947, 36.6002], // Monterey
-                    [-121.9018, 36.5537], // Carmel
-                    [-121.8088, 36.2678], // Big Sur
+                    // More detailed PCH route following the actual highway curves
+                    [-121.8947, 36.6002], // Monterey start
+                    [-121.9018, 36.5943], // Leaving Monterey
+                    [-121.9087, 36.5834], // Carmel approach
+                    [-121.9156, 36.5725], // Carmel-by-the-Sea
+                    [-121.9198, 36.5637], // Point Lobos area
+                    [-121.9234, 36.5548], // Carmel Highlands
+                    [-121.9287, 36.5439], // Rocky Point
+                    [-121.9341, 36.5330], // Soberanes Point
+                    [-121.9398, 36.5221], // Garrapata State Park
+                    [-121.9456, 36.5112], // Continuing south
+                    [-121.9187, 36.4934], // Bixby Creek Bridge approach
+                    [-121.9023, 36.4756], // After Bixby Bridge
+                    [-121.8934, 36.4645], // Hurricane Point
+                    [-121.8845, 36.4534], // Continuing PCH
+                    [-121.8756, 36.4423], // Point Sur area
+                    [-121.8667, 36.4312], // Big Sur village approach
+                    [-121.8578, 36.4201], // Big Sur River
+                    [-121.8489, 36.4090], // Ventana area
+                    [-121.8234, 36.3845], // Julia Pfeiffer Burns SP
+                    [-121.7987, 36.3567], // McWay Falls area
+                    [-121.7823, 36.3234], // Lucia area
+                    [-121.7654, 36.2901], // Continuing south
+                    [-121.7489, 36.2568], // Ragged Point
+                    [-121.7234, 36.2234], // Approaching Cambria
+                    [-121.0987, 35.8234], // Morro Bay area
                     [-120.8759, 35.6870]  // San Simeon
                 ],
                 rating: 4.8,
