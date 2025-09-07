@@ -2726,10 +2726,16 @@
             try {
                 sampleRoutes = await loadStravaRoutes();
                 console.log(`✅ Routes initialized: ${sampleRoutes.length} routes loaded`);
+                // 🚀 CRITICAL FIXES #5 & #6: Invalidate caches when new routes loaded
+                invalidateStatsCache();
+                invalidateFilteredRoutesCache();
             } catch (error) {
                 console.error('❌ Failed to initialize routes:', error);
                 sampleRoutes = generateSampleRoutes();
                 console.log('🔄 Using sample routes as fallback');
+                // 🚀 CRITICAL FIXES #5 & #6: Invalidate caches for fallback routes too
+                invalidateStatsCache();
+                invalidateFilteredRoutesCache();
             }
             
             populateRoutesList();
@@ -3068,10 +3074,9 @@
             }
         }
         
-        // Display all routes permanently on the globe
+        // 🚀 CRITICAL FIX #4: GPU-optimized batch rendering for 1000+ routes
         function displayAllRoutes() {
-            console.log(`🗺️ ATTEMPTING to display ${sampleRoutes.length} routes permanently on globe`);
-            console.log(`🗺️ Sample routes data:`, sampleRoutes.slice(0, 3)); // Log first 3 routes
+            console.log(`🚀 GPU BATCHING: Displaying ${sampleRoutes.length} routes with optimized rendering`);
             
             if (!viewer || !viewer.entities) {
                 console.error('❌ Viewer or entities not available for route display');
@@ -3081,79 +3086,122 @@
             // Clear existing permanent routes
             clearAllPermanentRoutes();
             
-            let routesAdded = 0;
-            let routesSkipped = 0;
+            // 🎯 PERFORMANCE: Group routes by type for batch rendering
+            const cyclingRoutes = [];
+            const runningRoutes = [];
+            let validRoutes = 0;
+            let skippedRoutes = 0;
             
             sampleRoutes.forEach((route, index) => {
-                console.log(`🔍 Route ${index}: ${route.name}`);
-                console.log(`🔍 - Type: ${route.type}`);
-                console.log(`🔍 - Has coordinates: ${!!(route.coordinates)}`);
-                console.log(`🔍 - Coordinates length: ${route.coordinates ? route.coordinates.length : 0}`);
-                
-                if (route.coordinates && route.coordinates.length > 0) {
-                    try {
-                        const positions = route.coordinates.map(coord => {
-                            if (!coord || coord.length < 2) {
-                                console.warn(`⚠️ Invalid coordinate:`, coord);
-                                return null;
-                            }
-                            return Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 10); // Higher elevation for visibility
-                        }).filter(pos => pos !== null);
-                        
-                        if (positions.length < 2) {
-                            console.warn(`⚠️ Route ${route.name} has insufficient valid positions: ${positions.length}`);
-                            routesSkipped++;
-                            return;
+                if (route.coordinates && route.coordinates.length > 1) {
+                    const positions = route.coordinates.map(coord => {
+                        if (!coord || coord.length < 2) return null;
+                        return Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 10);
+                    }).filter(pos => pos !== null);
+                    
+                    if (positions.length >= 2) {
+                        const routeData = { ...route, positions };
+                        if (route.type === 'cycling') {
+                            cyclingRoutes.push(routeData);
+                        } else {
+                            runningRoutes.push(routeData);
                         }
-                        
-                        console.log(`✅ Creating route entity for ${route.name} with ${positions.length} positions`);
-                        
-                        // Create MORE VISIBLE route polylines
-                        const routeEntity = viewer.entities.add({
-                            polyline: {
-                                positions: positions,
-                                width: 4, // Increased width
-                                material: route.type === 'cycling' ? 
-                                    Cesium.Color.BLUE.withAlpha(0.8) : // More opaque
-                                    Cesium.Color.RED.withAlpha(0.8),
-                                clampToGround: true,
-                                show: true,
-                                outline: true,
-                                outlineColor: Cesium.Color.WHITE.withAlpha(0.3)
-                            },
-                            name: `Permanent-${route.name}`,
-                            description: `${route.type} - ${route.distance}km - ${route.date}`,
-                            route: route // Store route data for filtering
-                        });
-                        
-                        // Mark as permanent and add to collection
-                        routeEntity.isPermanent = true;
-                        permanentRouteEntities.push(routeEntity);
-                        routesAdded++;
-                        
-                        console.log(`✅ Route entity created for ${route.name}`);
-                        
-                    } catch (error) {
-                        console.error(`❌ Error creating route ${route.name}:`, error);
-                        routesSkipped++;
+                        validRoutes++;
+                    } else {
+                        skippedRoutes++;
                     }
                 } else {
-                    console.log(`⚠️ Skipping route ${route.name} - no coordinates`);
-                    routesSkipped++;
+                    skippedRoutes++;
                 }
             });
             
-            console.log(`📊 ROUTE DISPLAY SUMMARY:`);
-            console.log(`📊 - Routes processed: ${sampleRoutes.length}`);
-            console.log(`📊 - Routes added: ${routesAdded}`);
-            console.log(`📊 - Routes skipped: ${routesSkipped}`);
-            console.log(`📊 - Total entities in viewer: ${viewer.entities.values.length}`);
+            console.log(`🎯 BATCHING: ${validRoutes} valid routes (${cyclingRoutes.length} cycling, ${runningRoutes.length} running), ${skippedRoutes} skipped`);
+            
+            // 🚀 BATCH RENDER: Create fewer GPU entities by combining routes
+            if (cyclingRoutes.length > 0) {
+                createBatchedRouteEntities(cyclingRoutes, 'cycling', Cesium.Color.BLUE.withAlpha(0.8));
+            }
+            
+            if (runningRoutes.length > 0) {
+                createBatchedRouteEntities(runningRoutes, 'running', Cesium.Color.RED.withAlpha(0.8));
+            }
+            
+            console.log(`📊 GPU BATCHING SUMMARY:`);
+            console.log(`📊 - Total routes processed: ${sampleRoutes.length}`);
+            console.log(`📊 - Valid routes: ${validRoutes}, Skipped: ${skippedRoutes}`);
+            console.log(`📊 - GPU entities created: ${permanentRouteEntities.length} (vs ${validRoutes} individual entities saved)`);
+            console.log(`📊 - Memory efficiency: ${validRoutes > 0 ? ((validRoutes - permanentRouteEntities.length) / validRoutes * 100).toFixed(1) : 0}% fewer GPU objects`);
             
             showAllRoutes = true;
             updatePermanentRouteVisibility();
             viewer.scene.requestRender();
             
-            console.log(`✅ Added ${permanentRouteEntities.length} permanent routes to globe`);
+            console.log(`🚀 GPU BATCHING: Created ${permanentRouteEntities.length} efficient entities for ${validRoutes} routes`);
+        }
+
+        // 🚀 CRITICAL FIX #4: Batch route entities for GPU efficiency
+        function createBatchedRouteEntities(routes, routeType, color) {
+            const batchSize = 50; // Routes per GPU entity (optimal balance)
+            const batches = [];
+            
+            // Group routes into batches for optimal GPU performance
+            for (let i = 0; i < routes.length; i += batchSize) {
+                batches.push(routes.slice(i, i + batchSize));
+            }
+            
+            console.log(`🎯 ${routeType.toUpperCase()}: Creating ${batches.length} GPU entities for ${routes.length} routes`);
+            
+            batches.forEach((batch, batchIndex) => {
+                // Combine all routes in this batch into single polyline collection
+                const allPositions = [];
+                const routeMetadata = [];
+                
+                batch.forEach(route => {
+                    if (route.positions && route.positions.length >= 2) {
+                        // Add separator between routes (small gap for visual distinction)
+                        if (allPositions.length > 0) {
+                            allPositions.push(undefined); // Cesium polyline break
+                        }
+                        allPositions.push(...route.positions);
+                        
+                        // Store metadata for individual route access (when clicking markers)
+                        routeMetadata.push({
+                            name: route.name,
+                            id: route.id,
+                            startIndex: allPositions.length - route.positions.length,
+                            endIndex: allPositions.length - 1,
+                            originalRoute: route
+                        });
+                    }
+                });
+                
+                if (allPositions.length > 0) {
+                    // Create single GPU entity for entire batch
+                    const batchEntity = viewer.entities.add({
+                        polyline: {
+                            positions: allPositions,
+                            width: 4,
+                            material: color,
+                            clampToGround: true,
+                            show: true,
+                            outline: true,
+                            outlineColor: Cesium.Color.WHITE.withAlpha(0.3)
+                        },
+                        name: `BatchedRoutes-${routeType}-${batchIndex}`,
+                        description: `${batch.length} ${routeType} routes`,
+                        // Store metadata for individual route extraction
+                        routeMetadata: routeMetadata,
+                        routeType: routeType,
+                        isBatched: true
+                    });
+                    
+                    // Mark as permanent and track
+                    batchEntity.isPermanent = true;
+                    permanentRouteEntities.push(batchEntity);
+                    
+                    console.log(`✅ Batch ${batchIndex + 1}/${batches.length}: ${batch.length} routes → 1 GPU entity`);
+                }
+            });
         }
         
         // Clear all permanent routes
@@ -3223,26 +3271,39 @@
             totalHeight: 0
         };
 
-        // Populate the routes list with virtual scrolling
+        // 🚀 CRITICAL FIX #6: Pre-filtered route collections for instant filter changes
+        let filteredRoutesCache = {
+            all: [],
+            cycling: [], 
+            running: [],
+            allWithZwift: [],
+            cyclingWithZwift: [],
+            runningWithZwift: [],
+            isValid: false,
+            lastUpdate: 0
+        };
+
+        // Populate the routes list with virtual scrolling and cached filtering
         function populateRoutesList() {
             const routesList = document.getElementById('routesList');
+            const startTime = performance.now();
             
-            console.log(`📜 Populating routes list with virtual scrolling - showZwiftRoutes: ${showZwiftRoutes}`);
+            console.log(`📜 Populating routes list with cached filtering - showZwiftRoutes: ${showZwiftRoutes}`);
             
-            const filteredRoutes = sampleRoutes.filter(route => {
-                const matchesFilter = currentFilter === 'all' || route.type === currentFilter;
-                const isZwiftActivity = isZwiftRoute(route);
-                const shouldInclude = matchesFilter && (!isZwiftActivity || showZwiftRoutes);
-                
-                // Debug some Zwift routes
-                if (isZwiftActivity) {
-                    console.log(`🏃 Zwift route "${route.name}" - included: ${shouldInclude}`);
-                }
-                
-                return shouldInclude;
-            });
+            // Check if filtered cache needs rebuilding
+            if (!filteredRoutesCache.isValid) {
+                rebuildFilteredRoutesCache();
+            }
             
-            console.log(`📊 Virtual scroll: ${filteredRoutes.length} routes from ${sampleRoutes.length} total`);
+            // Get pre-filtered routes instantly from cache
+            const cacheKey = showZwiftRoutes 
+                ? `${currentFilter}WithZwift`  
+                : currentFilter;
+            
+            const filteredRoutes = filteredRoutesCache[cacheKey] || [];
+            
+            const filterTime = performance.now() - startTime;
+            console.log(`🚀 FILTER CACHE: Instant lookup in ${filterTime.toFixed(2)}ms - ${filteredRoutes.length} routes (key: ${cacheKey})`);
             
             // Update virtual scroll state
             virtualScrollState.filteredRoutes = filteredRoutes;
@@ -3253,6 +3314,46 @@
             
             // Render initial visible items
             renderVisibleRoutes();
+        }
+
+        function rebuildFilteredRoutesCache() {
+            if (sampleRoutes.length === 0) {
+                filteredRoutesCache.isValid = false;
+                return;
+            }
+            
+            const startTime = performance.now();
+            console.log(`🔄 REBUILDING FILTER CACHE: Processing ${sampleRoutes.length} routes...`);
+            
+            // Pre-calculate all possible filter combinations
+            const allRoutes = sampleRoutes;
+            const cyclingRoutes = sampleRoutes.filter(route => route.type === 'cycling');
+            const runningRoutes = sampleRoutes.filter(route => route.type === 'running');
+            
+            // Filter out Zwift routes for non-Zwift collections
+            const allNonZwift = allRoutes.filter(route => !isZwiftRoute(route));
+            const cyclingNonZwift = cyclingRoutes.filter(route => !isZwiftRoute(route));
+            const runningNonZwift = runningRoutes.filter(route => !isZwiftRoute(route));
+            
+            // Cache all filter combinations
+            filteredRoutesCache.all = allNonZwift;
+            filteredRoutesCache.cycling = cyclingNonZwift;
+            filteredRoutesCache.running = runningNonZwift;
+            filteredRoutesCache.allWithZwift = allRoutes;
+            filteredRoutesCache.cyclingWithZwift = cyclingRoutes;
+            filteredRoutesCache.runningWithZwift = runningRoutes;
+            
+            filteredRoutesCache.lastUpdate = Date.now();
+            filteredRoutesCache.isValid = true;
+            
+            const buildTime = performance.now() - startTime;
+            console.log(`✅ FILTER CACHE BUILT: ${buildTime.toFixed(2)}ms for ${sampleRoutes.length} routes`);
+            console.log(`📊 Filter cache: All(${allNonZwift.length}/${allRoutes.length}), Cycling(${cyclingNonZwift.length}/${cyclingRoutes.length}), Running(${runningNonZwift.length}/${runningRoutes.length})`);
+        }
+
+        function invalidateFilteredRoutesCache() {
+            filteredRoutesCache.isValid = false;
+            console.log('🗑️ Filter cache invalidated - will rebuild on next access');
         }
 
         function setupVirtualScrollContainer(routesList) {
@@ -3473,38 +3574,93 @@
             }
         }
 
-        // Update statistics
+        // 🚀 CRITICAL FIX #5: Precomputed statistics cache for instant filter changes
+        let statsCache = {
+            all: null,
+            cycling: null,
+            running: null,
+            lastUpdate: 0,
+            isValid: false
+        };
+
+        // Update statistics with intelligent caching
         function updateStats() {
-            const filteredRoutes = sampleRoutes.filter(route => {
-                return currentFilter === 'all' || route.type === currentFilter;
-            });
+            const startTime = performance.now();
             
-            // Calculate separate stats for cycling and running from ALL routes (not filtered)
-            const allCyclingRoutes = sampleRoutes.filter(route => route.type === 'cycling');
-            const allRunningRoutes = sampleRoutes.filter(route => route.type === 'running');
+            // Check if cache needs rebuilding
+            if (!statsCache.isValid || sampleRoutes.length === 0) {
+                rebuildStatsCache();
+            }
             
-            const cyclingDistance = allCyclingRoutes.reduce((sum, route) => sum + route.distance, 0);
-            const runningDistance = allRunningRoutes.reduce((sum, route) => sum + route.distance, 0);
+            // Get cached stats for current filter (instant lookup)
+            const currentStats = statsCache[currentFilter] || statsCache.all;
             
-            // Calculate filtered stats for current view
-            const totalDistance = filteredRoutes.reduce((sum, route) => sum + route.distance, 0);
-            const totalTime = filteredRoutes.reduce((sum, route) => sum + route.time, 0);
-            const uniqueLocations = [...new Set(filteredRoutes.map(route => route.location.split(',')[1]?.trim()))];
+            if (currentStats) {
+                // Update UI instantly from cache
+                document.getElementById('totalRoutes').textContent = currentStats.routeCount;
+                document.getElementById('totalDistance').textContent = `${currentStats.totalDistance.toFixed(1)} km`;
+                document.getElementById('cyclingDistance').textContent = `${statsCache.cycling.totalDistance.toFixed(1)} km`;
+                document.getElementById('runningDistance').textContent = `${statsCache.running.totalDistance.toFixed(1)} km`;
+                document.getElementById('totalTime').textContent = `${Math.floor(currentStats.totalTime/60)}h`;
+                document.getElementById('countries').textContent = currentStats.countries;
+                
+                const renderTime = performance.now() - startTime;
+                console.log(`🚀 STATS CACHE: Instant update in ${renderTime.toFixed(2)}ms (filter: ${currentFilter})`);
+            } else {
+                console.warn('⚠️ Stats cache miss - rebuilding...');
+                rebuildStatsCache();
+                updateStats(); // Retry with fresh cache
+            }
+        }
+
+        function rebuildStatsCache() {
+            if (sampleRoutes.length === 0) {
+                statsCache.isValid = false;
+                return;
+            }
             
-            // Update UI with stats
-            document.getElementById('totalRoutes').textContent = filteredRoutes.length;
-            document.getElementById('totalDistance').textContent = `${totalDistance.toFixed(1)} km`;
-            document.getElementById('cyclingDistance').textContent = `${cyclingDistance.toFixed(1)} km`;
-            document.getElementById('runningDistance').textContent = `${runningDistance.toFixed(1)} km`;
-            document.getElementById('totalTime').textContent = `${Math.floor(totalTime/60)}h`;
-            document.getElementById('countries').textContent = uniqueLocations.filter(Boolean).length;
+            const startTime = performance.now();
+            console.log(`🔄 REBUILDING STATS CACHE: Processing ${sampleRoutes.length} routes...`);
             
-            // Debug output to see what we're calculating
-            console.log(`📊 STATS UPDATE:`);
-            console.log(`📊 - Total routes: ${sampleRoutes.length}`);
-            console.log(`📊 - Cycling routes: ${allCyclingRoutes.length} (${cyclingDistance.toFixed(1)} km)`);
-            console.log(`📊 - Running routes: ${allRunningRoutes.length} (${runningDistance.toFixed(1)} km)`);
-            console.log(`📊 - Filtered routes: ${filteredRoutes.length} (${totalDistance.toFixed(1)} km)`);
+            // Pre-calculate stats for all filter combinations
+            const allRoutes = sampleRoutes;
+            const cyclingRoutes = sampleRoutes.filter(route => route.type === 'cycling');
+            const runningRoutes = sampleRoutes.filter(route => route.type === 'running');
+            
+            // Calculate stats for each filter type
+            statsCache.all = calculateRouteStats(allRoutes, 'all');
+            statsCache.cycling = calculateRouteStats(cyclingRoutes, 'cycling');
+            statsCache.running = calculateRouteStats(runningRoutes, 'running');
+            
+            statsCache.lastUpdate = Date.now();
+            statsCache.isValid = true;
+            
+            const buildTime = performance.now() - startTime;
+            console.log(`✅ STATS CACHE BUILT: ${buildTime.toFixed(2)}ms for ${sampleRoutes.length} routes`);
+            console.log(`📊 Cache contains: All(${statsCache.all.routeCount}), Cycling(${statsCache.cycling.routeCount}), Running(${statsCache.running.routeCount})`);
+        }
+
+        function calculateRouteStats(routes, filterType) {
+            const totalDistance = routes.reduce((sum, route) => sum + (route.distance || 0), 0);
+            const totalTime = routes.reduce((sum, route) => sum + (route.time || 0), 0);
+            const uniqueLocations = [...new Set(routes.map(route => {
+                const country = route.location?.split(',')[1]?.trim();
+                return country;
+            }))].filter(Boolean);
+            
+            return {
+                routeCount: routes.length,
+                totalDistance: totalDistance,
+                totalTime: totalTime,
+                countries: uniqueLocations.length,
+                filterType: filterType
+            };
+        }
+
+        // Invalidate cache when routes change
+        function invalidateStatsCache() {
+            statsCache.isValid = false;
+            console.log('🗑️ Stats cache invalidated - will rebuild on next update');
         }
         
         // NEW: Update stats immediately from Strava athlete stats (before individual routes load)
