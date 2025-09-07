@@ -486,11 +486,21 @@
             
             let detectedReason = null;
             
-            // PRIORITY 1: Use Strava's most reliable indoor indicators (minimal data)
+            // PRIORITY 1: Use Strava's most reliable indoor indicators
             if (route.trainer === true) {
-                detectedReason = 'Strava trainer flag';
+                detectedReason = 'Strava trainer flag (most reliable)';
             } else if (route.sport_type === 'VirtualRide') {
                 detectedReason = 'Strava VirtualRide type';
+            } else if (route.manual === true && route.coordinates?.length === 0) {
+                detectedReason = 'Manual activity without GPS (likely indoor)';
+            } else if (route.workout_type && route.coordinates?.length === 0) {
+                detectedReason = 'Structured workout without GPS (likely indoor)';
+            } else if (route.device_name?.toLowerCase().includes('trainer')) {
+                detectedReason = 'Trainer device detected';
+            } else if (route.description?.toLowerCase().includes('zwift')) {
+                detectedReason = 'Zwift mentioned in description';
+            } else if (route.description?.toLowerCase().includes('indoor')) {
+                detectedReason = 'Indoor mentioned in description';
             }
             
             // PRIORITY 2: Only if Strava fields don't give a definitive answer, check name patterns
@@ -555,13 +565,21 @@
                 console.log(`🏃 ZWIFT DETECTED: "${route.name}" - ${detectedReason}`);
             }
             
-            // ENHANCED DEBUG: Show detection method and key Strava fields for first 10 routes
+            // COMPREHENSIVE DEBUG: Show all Strava fields for better detection analysis (first 15 routes)
             if (window.routeClassificationCount === undefined) window.routeClassificationCount = 0;
-            if (window.routeClassificationCount < 10) {
+            if (window.routeClassificationCount < 15) {
                 window.routeClassificationCount++;
-                const stravaData = `trainer:${route.trainer}, sport_type:${route.sport_type}`;
+                const stravaFields = {
+                    trainer: route.trainer,
+                    sport_type: route.sport_type,
+                    manual: route.manual,
+                    workout_type: route.workout_type,
+                    device_name: route.device_name,
+                    has_gps: route.coordinates?.length > 0,
+                    description_preview: route.description?.substring(0, 50)
+                };
                 console.log(`${isZwift ? '🏠' : '🌍'} Route ${window.routeClassificationCount}: "${route.name}"`);
-                console.log(`   📊 Strava: ${stravaData}`);
+                console.log(`   📊 Strava Fields:`, stravaFields);
                 console.log(`   🎯 Result: ${isZwift ? `INDOOR (${detectedReason})` : 'OUTDOOR'}`);
                 console.log(''); // Blank line for readability
             }
@@ -1070,9 +1088,16 @@
                 distance: Math.round((activity.distance || 0) / 100) / 10, // Faster: meters to km
                 coordinates: coordinates, // Only GPS data we need
                 
-                // MINIMAL: Only the most reliable indoor detection field
-                trainer: activity.trainer, // Boolean: true for indoor trainer (covers Zwift, TrainerRoad, etc.)
-                sport_type: activity.sport_type || activity.type // VirtualRide type as secondary indicator
+                // COMPREHENSIVE: Capture all Strava fields that indicate indoor activities
+                trainer: activity.trainer, // Boolean: true for indoor trainer (most reliable)
+                sport_type: activity.sport_type || activity.type, // VirtualRide type
+                manual: activity.manual, // Manual activities are often indoor
+                private: activity.private, // Some users mark virtual rides as private
+                commute: activity.commute, // Usually false for virtual activities
+                workout_type: activity.workout_type, // Structured workouts often indoor
+                description: activity.description, // May contain "Zwift", "indoor", etc.
+                device_name: activity.device_name, // May indicate trainer/smart devices
+                gear_id: activity.gear_id // Virtual bikes have specific gear IDs
             };
         }
         
@@ -2110,7 +2135,11 @@
                 return shouldInclude;
             });
             
-            console.log(`🔧 DEBUG: Cluster filtering - Total routes: ${sampleRoutes.length}, After type filter: ${sampleRoutes.filter(r => currentFilter === 'all' || r.type === currentFilter).length}, After Zwift filter: ${filteredRoutes.length}, showZwiftRoutes: ${showZwiftRoutes}`);
+            // DEBUG: Check what's happening with the filters
+            const typeFilteredRoutes = sampleRoutes.filter(r => currentFilter === 'all' || r.type === currentFilter);
+            console.log(`🔧 DEBUG: Cluster filtering - currentFilter: "${currentFilter}"`);
+            console.log(`🔧 DEBUG: Sample route types:`, sampleRoutes.slice(0, 5).map(r => r.type));
+            console.log(`🔧 DEBUG: Total routes: ${sampleRoutes.length}, After type filter: ${typeFilteredRoutes.length}, After Zwift filter: ${filteredRoutes.length}, showZwiftRoutes: ${showZwiftRoutes}`);
             
             const clusters = clusterRoutes(filteredRoutes, 100); // 100km clustering radius
             
@@ -4168,8 +4197,11 @@
                     updatePermanentRouteVisibility();
                     populateRoutesList();
                     
-                    // CRITICAL: Refresh cluster markers to respect Zwift filtering
-                    createClusterMarkers();
+                    // CRITICAL: Refresh cluster markers to respect Zwift filtering (with small delay to avoid throttling)
+                    setTimeout(() => {
+                        console.log('🔄 ZWIFT TOGGLE: Refreshing cluster markers after Zwift visibility change');
+                        createClusterMarkers();
+                    }, 100); // Small delay to ensure throttling doesn't block
                     
                     console.log(`🏠 Zwift routes ${showZwiftRoutes ? 'SHOWN' : 'HIDDEN'} - Button updated`);
                     
