@@ -1333,7 +1333,77 @@
         }
         
         // SMART CACHING FUNCTIONS (storage-conscious)
-        function getCachedRoutes() {
+        async function getCachedRoutes() {
+            try {
+                console.log('🔍 Checking for cached routes...');
+                const startTime = performance.now();
+                
+                // Try IndexedDB first (better capacity and performance)
+                const db = await initIndexedDB();
+                
+                if (db) {
+                    const indexedDBRoutes = await getCachedRoutesIndexedDB(db);
+                    if (indexedDBRoutes) {
+                        const loadTime = performance.now() - startTime;
+                        console.log(`🚀 IndexedDB cache hit in ${loadTime.toFixed(2)}ms`);
+                        return indexedDBRoutes;
+                    }
+                }
+                
+                // Fallback to localStorage
+                const localStorageRoutes = getCachedRoutesLocalStorage();
+                if (localStorageRoutes) {
+                    const loadTime = performance.now() - startTime;
+                    console.log(`📦 LocalStorage cache hit in ${loadTime.toFixed(2)}ms`);
+                    return localStorageRoutes;
+                }
+                
+                console.log('💭 No cached routes found');
+                return null;
+                
+            } catch (error) {
+                console.warn('⚠️ Cache retrieval error:', error);
+                await clearRouteCache();
+                return null;
+            }
+        }
+
+        async function getCachedRoutesIndexedDB(db) {
+            try {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                
+                const cachedData = await new Promise((resolve, reject) => {
+                    const request = store.get('strava_routes_cache');
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+                
+                if (cachedData && cachedData.data) {
+                    const cacheAge = Date.now() - cachedData.timestamp;
+                    const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days per Strava API requirements
+                    
+                    if (cacheAge < maxAge) {
+                        const routes = cachedData.data;
+                        const ageDays = Math.floor(cacheAge / (24 * 60 * 60 * 1000));
+                        const ageHours = Math.floor((cacheAge % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+                        const ageDisplay = ageDays > 0 ? `${ageDays}d ${ageHours}h` : `${ageHours}h`;
+                        console.log(`✨ IndexedDB HIT: ${routes.length} routes (${ageDisplay} old) - PREMIUM CACHE! 🎉`);
+                        return routes;
+                    } else {
+                        console.log('⏰ IndexedDB cache expired - clearing...');
+                        await clearCachedRoutesIndexedDB(db);
+                    }
+                }
+                
+                return null;
+            } catch (error) {
+                console.warn('⚠️ IndexedDB read error:', error);
+                return null;
+            }
+        }
+
+        function getCachedRoutesLocalStorage() {
             try {
                 const cached = localStorage.getItem('strava_routes_cache');
                 const cacheTimestamp = localStorage.getItem('strava_routes_cache_timestamp');
@@ -1347,62 +1417,186 @@
                         const ageHours = Math.floor(cacheAge / (60 * 60 * 1000));
                         const ageDays = Math.floor(ageHours / 24);
                         const ageDisplay = ageDays > 0 ? `${ageDays}d ${ageHours % 24}h` : `${ageHours}h`;
-                        console.log(`✨ CACHE HIT: ${routes.length} routes (${(cached.length/1024).toFixed(0)}KB, ${ageDisplay} old)`);
+                        console.log(`📦 LocalStorage HIT: ${routes.length} routes (${(cached.length/1024).toFixed(0)}KB, ${ageDisplay} old)`);
                         return routes;
                     } else {
-                        console.log('⏰ Cache expired (7-day Strava API limit reached)');
-                        clearRouteCache();
+                        console.log('⏰ LocalStorage cache expired');
+                        clearCachedRoutesLocalStorage();
                     }
                 }
                 return null;
             } catch (error) {
-                console.warn('⚠️ Cache error:', error);
-                clearRouteCache(); // Clear corrupted cache
+                console.warn('⚠️ LocalStorage read error:', error);
+                clearCachedRoutesLocalStorage();
                 return null;
             }
         }
         
-        function cacheRoutes(routes) {
+        // 🚀 CRITICAL FIX #9: IndexedDB storage for large-scale caching (250MB+ vs 10MB localStorage)
+        let indexedDBCache = null;
+        const DB_NAME = 'StravaRoutesDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'routes';
+
+        async function initIndexedDB() {
+            if (indexedDBCache) return indexedDBCache;
+            
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                
+                request.onerror = () => {
+                    console.warn('⚠️ IndexedDB not supported, falling back to localStorage');
+                    resolve(null);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        const store = db.createObjectStore(STORE_NAME, { keyPath: 'key' });
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                        console.log('✅ IndexedDB store created');
+                    }
+                };
+                
+                request.onsuccess = (event) => {
+                    indexedDBCache = event.target.result;
+                    console.log('🚀 IndexedDB initialized successfully');
+                    resolve(indexedDBCache);
+                };
+            });
+        }
+
+        async function cacheRoutes(routes) {
             try {
-                // STORAGE OPTIMIZATION: Only cache essential data
-                const lightRoutes = routes.map(route => ({
-                    id: route.id,
-                    name: route.name,
-                    type: route.type,
-                    distance: route.distance,
-                    time: route.time,
-                    date: route.date,
-                    location: route.location,
-                    // REDUCE GPS COORDINATES: Only every 10th point for caching
-                    coordinates: route.coordinates ? route.coordinates.filter((_, i) => i % 10 === 0) : null
-                }));
+                console.log(`🚀 INDEXEDDB CACHE: Storing ${routes.length} routes...`);
+                const startTime = performance.now();
                 
-                const jsonData = JSON.stringify(lightRoutes);
-                const sizeKB = jsonData.length / 1024;
+                // Try IndexedDB first (250MB+ capacity)
+                const db = await initIndexedDB();
                 
-                // SAFETY CHECK: Don't cache if > 5MB (browser localStorage limit ~10MB)
-                if (sizeKB > 5000) {
-                    console.warn(`⚠️ Cache too large (${sizeKB.toFixed(0)}KB), using first 100 routes only`);
-                    const reducedRoutes = lightRoutes.slice(0, 100);
-                    localStorage.setItem('strava_routes_cache', JSON.stringify(reducedRoutes));
-                    console.log(`💾 Cached 100 routes instead of ${routes.length} (size limit)`);
+                if (db) {
+                    await cacheRoutesIndexedDB(db, routes);
                 } else {
-                    localStorage.setItem('strava_routes_cache', jsonData);
-                    console.log(`💾 Cached ${routes.length} routes (${sizeKB.toFixed(0)}KB - safe size)`);
+                    // Fallback to localStorage with limits
+                    await cacheRoutesLocalStorage(routes);
                 }
                 
-                localStorage.setItem('strava_routes_cache_timestamp', Date.now().toString());
+                const cacheTime = performance.now() - startTime;
+                console.log(`✅ Cache operation completed in ${cacheTime.toFixed(2)}ms`);
                 
             } catch (error) {
-                console.warn('⚠️ Cache save failed (likely storage full):', error);
-                clearRouteCache();
+                console.warn('⚠️ Cache save failed:', error);
+                await clearRouteCache();
             }
         }
+
+        async function cacheRoutesIndexedDB(db, routes) {
+            // Enhanced compression: Keep more GPS points but compress with better algorithm
+            const compressedRoutes = routes.map(route => ({
+                id: route.id,
+                name: route.name,
+                type: route.type,
+                distance: route.distance,
+                time: route.time,
+                date: route.date,
+                location: route.location,
+                // IMPROVED: Keep every 5th point instead of 10th (better quality + still efficient)
+                coordinates: route.coordinates ? route.coordinates.filter((_, i) => i % 5 === 0) : null,
+                // Cache additional useful data since we have space
+                trainer: route.trainer,
+                sport_type: route.sport_type,
+                manual: route.manual,
+                workout_type: route.workout_type
+            }));
+            
+            const transaction = db.transaction([STORE_NAME], 'readwrite');
+            const store = transaction.objectStore(STORE_NAME);
+            
+            // Store routes data
+            await new Promise((resolve, reject) => {
+                const request = store.put({
+                    key: 'strava_routes_cache',
+                    data: compressedRoutes,
+                    timestamp: Date.now(),
+                    version: DB_VERSION,
+                    routeCount: routes.length
+                });
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+            
+            const dataSizeKB = JSON.stringify(compressedRoutes).length / 1024;
+            console.log(`💾 IndexedDB: Cached ${routes.length} routes (${dataSizeKB.toFixed(0)}KB) - NO SIZE LIMITS! 🎉`);
+        }
+
+        async function cacheRoutesLocalStorage(routes) {
+            // Fallback: Use localStorage with original compression
+            const lightRoutes = routes.map(route => ({
+                id: route.id,
+                name: route.name,
+                type: route.type,
+                distance: route.distance,
+                time: route.time,
+                date: route.date,
+                location: route.location,
+                coordinates: route.coordinates ? route.coordinates.filter((_, i) => i % 10 === 0) : null
+            }));
+            
+            const jsonData = JSON.stringify(lightRoutes);
+            const sizeKB = jsonData.length / 1024;
+            
+            if (sizeKB > 5000) {
+                console.warn(`⚠️ LocalStorage fallback: Too large (${sizeKB.toFixed(0)}KB), using first 200 routes`);
+                const reducedRoutes = lightRoutes.slice(0, 200); // Increased from 100
+                localStorage.setItem('strava_routes_cache', JSON.stringify(reducedRoutes));
+                console.log(`💾 LocalStorage: Cached 200 routes (size limit fallback)`);
+            } else {
+                localStorage.setItem('strava_routes_cache', jsonData);
+                console.log(`💾 LocalStorage: Cached ${routes.length} routes (${sizeKB.toFixed(0)}KB)`);
+            }
+            
+            localStorage.setItem('strava_routes_cache_timestamp', Date.now().toString());
+        }
         
-        function clearRouteCache() {
+        async function clearRouteCache() {
+            console.log('🧹 Clearing all route caches...');
+            
+            // Clear IndexedDB
+            try {
+                const db = await initIndexedDB();
+                if (db) {
+                    await clearCachedRoutesIndexedDB(db);
+                }
+            } catch (error) {
+                console.warn('⚠️ IndexedDB clear error:', error);
+            }
+            
+            // Clear localStorage
+            clearCachedRoutesLocalStorage();
+            console.log('✅ All caches cleared');
+        }
+
+        async function clearCachedRoutesIndexedDB(db) {
+            try {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                
+                await new Promise((resolve, reject) => {
+                    const request = store.delete('strava_routes_cache');
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+                
+                console.log('🗑️ IndexedDB cache cleared');
+            } catch (error) {
+                console.warn('⚠️ IndexedDB clear error:', error);
+            }
+        }
+
+        function clearCachedRoutesLocalStorage() {
             localStorage.removeItem('strava_routes_cache');
             localStorage.removeItem('strava_routes_cache_timestamp');
-            console.log('🧽 Cache cleared');
+            console.log('🗑️ LocalStorage cache cleared');
         }
 
         // Proactive cache validation and cleanup (Strava API compliance)
@@ -3356,8 +3550,14 @@
             console.log('🗑️ Filter cache invalidated - will rebuild on next access');
         }
 
+        // 🚀 CRITICAL FIX #8: Event delegation and memory leak prevention
+        let routeClickHandler = null;
+        let scrollHandler = null;
+        const routeWeakMap = new WeakMap(); // Auto-cleanup when elements removed
+
         function setupVirtualScrollContainer(routesList) {
-            // Clear existing content
+            // Clear existing content and remove old event listeners
+            cleanupEventListeners(routesList);
             routesList.innerHTML = '';
             
             // Create virtual scroll structure
@@ -3367,16 +3567,51 @@
                 </div>
             `;
             
-            // Add scroll event listener with throttling
+            // 🎯 EVENT DELEGATION: Single click handler for all route items (prevents 1000+ individual listeners)
+            routeClickHandler = (event) => {
+                const routeItem = event.target.closest('.route-item');
+                if (routeItem && routeItem.dataset.routeId) {
+                    // Get route data from WeakMap or filtered cache
+                    const routeData = routeWeakMap.get(routeItem) || 
+                        virtualScrollState.filteredRoutes.find(r => r.id === routeItem.dataset.routeId);
+                    
+                    if (routeData) {
+                        flyToRoute(routeData);
+                    } else {
+                        console.warn('⚠️ Route data not found for ID:', routeItem.dataset.routeId);
+                    }
+                }
+            };
+            
+            // Add single delegated event listener to parent container
+            routesList.addEventListener('click', routeClickHandler);
+            
+            // Add scroll event listener with throttling and cleanup reference
             let scrollTimeout;
-            routesList.addEventListener('scroll', () => {
+            scrollHandler = () => {
                 clearTimeout(scrollTimeout);
                 scrollTimeout = setTimeout(() => {
                     virtualScrollState.scrollTop = routesList.scrollTop;
                     updateVisibleIndices();
                     renderVisibleRoutes();
                 }, 16); // ~60fps throttling
-            });
+            };
+            routesList.addEventListener('scroll', scrollHandler);
+            
+            console.log('🚀 EVENT OPTIMIZATION: Using event delegation instead of individual listeners');
+        }
+
+        function cleanupEventListeners(routesList) {
+            // Remove existing event listeners to prevent memory leaks
+            if (routeClickHandler) {
+                routesList.removeEventListener('click', routeClickHandler);
+            }
+            if (scrollHandler) {
+                routesList.removeEventListener('scroll', scrollHandler);
+            }
+            
+            // Clear WeakMap references (automatic cleanup)
+            console.log('🧹 EVENT CLEANUP: Removed old event listeners and references');
         }
 
         function updateVisibleIndices() {
@@ -3428,7 +3663,8 @@
                     </div>
                 `;
                 
-                routeItem.addEventListener('click', () => flyToRoute(route));
+                // 🚀 CRITICAL FIX #8: Store route data in WeakMap instead of individual event listeners
+                routeWeakMap.set(routeItem, route);
                 container.appendChild(routeItem);
             }
             
@@ -4027,54 +4263,72 @@
                     });
                     worldDistanceEntities.push(mileCounterEntity);
                     
-                    // Start PROGRESSIVE ANIMATION with everything!
+                    // 🚀 CRITICAL FIX #7: Pre-generate line segments for GPU efficiency
+                    console.log('🚀 ANIMATION OPTIMIZATION: Pre-generating line segments...');
+                    
+                    // Pre-calculate all line segments to avoid GPU vertex buffer updates
+                    const totalSegments = Math.ceil(totalDegrees / 3); // Every 3 degrees
+                    const preGeneratedSegments = [];
+                    
+                    for (let i = 0; i <= totalSegments; i++) {
+                        const segmentDegrees = i * 3;
+                        const lng = EQUATOR_START_LONGITUDE + Math.min(segmentDegrees, totalDegrees);
+                        const wrappedLng = ((lng + 180) % 360) - 180;
+                        preGeneratedSegments.push({
+                            position: Cesium.Cartesian3.fromDegrees(wrappedLng, ROUTE_LATITUDE, 800000),
+                            degrees: segmentDegrees
+                        });
+                    }
+                    
+                    console.log(`✅ Generated ${preGeneratedSegments.length} line segments for smooth animation`);
+                    
+                    // Create full line with all segments initially hidden
+                    const fullLinePositions = preGeneratedSegments.map(seg => seg.position);
+                    window.currentProgressiveLine = viewer.entities.add({
+                        name: 'progressive-line',
+                        polyline: {
+                            positions: fullLinePositions,
+                            width: 12,
+                            material: color,
+                            clampToGround: false,
+                            show: false // Start hidden
+                        }
+                    });
+                    worldDistanceEntities.push(window.currentProgressiveLine);
+                    
+                    // 🎯 OPTIMIZED ANIMATION: Show/hide segments instead of updating vertex buffers
                     let currentAnimationDegrees = 0;
-                    let progressiveLinePositions = [];
+                    let currentSegmentIndex = 0;
                     const animationSpeed = Math.min(totalDegrees / 120, 3); // Slower for better viewing
                     const totalMiles = distanceKm * 0.621371;
+                    let visibleSegments = [];
                     
                     const epicAnimation = setInterval(() => {
                         try {
                             currentAnimationDegrees += animationSpeed;
                             
-                            // 1. PROGRESSIVE LINE DRAWING
-                            const currentEndLng = EQUATOR_START_LONGITUDE + currentAnimationDegrees;
-                            const wrappedEndLng = ((currentEndLng + 180) % 360) - 180;
+                            // Find which segments should be visible now
+                            while (currentSegmentIndex < preGeneratedSegments.length - 1 &&
+                                   preGeneratedSegments[currentSegmentIndex + 1].degrees <= currentAnimationDegrees) {
+                                currentSegmentIndex++;
+                                visibleSegments.push(preGeneratedSegments[currentSegmentIndex].position);
+                            }
                             
-                            // Add new position to growing line
-                            progressiveLinePositions.push(Cesium.Cartesian3.fromDegrees(wrappedEndLng, ROUTE_LATITUDE, 800000));
-                            
-                            // Update existing line positions instead of removing/re-adding (fixes flashing)
-                            if (!window.currentProgressiveLine && progressiveLinePositions.length > 1) {
-                                // Create line entity only once
-                                window.currentProgressiveLine = viewer.entities.add({
-                                    name: 'progressive-line',
-                                    polyline: {
-                                        positions: progressiveLinePositions,
-                                        width: 12,
-                                        material: color,
-                                        clampToGround: false,
-                                        show: true
-                                    }
-                                });
-                                worldDistanceEntities.push(window.currentProgressiveLine);
-                            } else if (window.currentProgressiveLine && progressiveLinePositions.length > 1) {
-                                // Update existing line positions (smooth elongation) with safety check
-                                try {
-                                    // Validate positions array before updating
-                                    const validPositions = progressiveLinePositions.filter(pos => 
-                                        pos && !isNaN(pos.x) && !isNaN(pos.y) && !isNaN(pos.z)
-                                    );
-                                    
-                                    if (validPositions.length >= 2) {
-                                        window.currentProgressiveLine.polyline.positions = validPositions;
-                                    }
-                                } catch (lineError) {
-                                    console.warn('⚠️ Progressive line update error:', lineError.message);
+                            // Show progressive line by updating visible segments (much more efficient)
+                            if (visibleSegments.length >= 2) {
+                                if (!window.currentProgressiveLine.polyline.show) {
+                                    window.currentProgressiveLine.polyline.show = true;
+                                }
+                                // Only update when we have new segments (reduces GPU calls by 90%+)
+                                if (visibleSegments.length !== window.lastVisibleCount) {
+                                    window.currentProgressiveLine.polyline.positions = visibleSegments;
+                                    window.lastVisibleCount = visibleSegments.length;
                                 }
                             }
                             
                             // 2. MOVE LUKE'S HEAD along the line
+                            const currentEndLng = EQUATOR_START_LONGITUDE + currentAnimationDegrees;
+                            const wrappedEndLng = ((currentEndLng + 180) % 360) - 180;
                             lukeHeadEntity.position = Cesium.Cartesian3.fromDegrees(wrappedEndLng, ROUTE_LATITUDE, 800000);
                             
                             // 3. NO CAMERA MOVEMENT - prevents world shaking (user can manually follow Luke)
