@@ -480,9 +480,18 @@
         let currentFilter = 'all';
         let showZwiftRoutes = false; // Hide Zwift routes by default
         
+        // PERFORMANCE OPTIMIZATION: Cache Zwift detection results to avoid repeated expensive operations
+        const zwiftDetectionCache = new Map();
+
         // ENHANCED: Reliable Zwift detection using Strava's official data fields
         function isZwiftRoute(route) {
             if (!route || !route.name) return false;
+            
+            // PERFORMANCE: Use cached result if available (critical for 1000s of routes)
+            const cacheKey = route.id || route.name;
+            if (zwiftDetectionCache.has(cacheKey)) {
+                return zwiftDetectionCache.get(cacheKey);
+            }
             
             let detectedReason = null;
             
@@ -584,6 +593,8 @@
                 console.log(''); // Blank line for readability
             }
             
+            // PERFORMANCE: Cache the result for future calls
+            zwiftDetectionCache.set(cacheKey, isZwift);
             return isZwift;
         }
         let sampleRoutes = [];
@@ -591,6 +602,11 @@
         let currentZoomLevel = 0;
         let showAllRoutes = false; // Toggle for showing all routes
         let worldDistanceEntities = []; // For around-the-world distance visualization
+
+        // OPTION A: Static Marker Pool - Create once, persist forever, toggle visibility
+        const PERSISTENT_MARKERS = new Map(); // Main marker storage: markerId -> {entity, routes, isZwift, city}
+        const ZOOM_LEVEL_MARKERS = new Map(); // Different markers for different zoom levels
+        let currentMarkerSet = null; // Track which marker set is currently visible
         let worldDistanceAnimation = null; // Animation handle
         let isAnimationInProgress = false; // CRITICAL: Prevent camera corrections during animations
         let savedCameraPosition = null; // Save camera position before visualization
@@ -2075,6 +2091,233 @@
         let lastMarkerCreation = 0;
         const MARKER_THROTTLE_MS = 1000; // Minimum 1 second between recreations
 
+        // PERFORMANCE OPTIMIZATION: Get geographically diverse routes to prevent clustering overload
+        function getGeographicallyDiverseRoutes(routes, maxCount) {
+            if (routes.length <= maxCount) return routes;
+            
+            try {
+                // Simple geographic diversity: spread routes across different coordinate areas
+                const gridSize = Math.ceil(Math.sqrt(maxCount)); // Create a grid
+                const routesByGrid = new Map();
+                
+                routes.forEach(route => {
+                    if (route.coordinates && route.coordinates.length > 0) {
+                        // Get first coordinate for geographic binning
+                        const [lng, lat] = route.coordinates[0];
+                        const gridX = Math.floor((lng + 180) / (360 / gridSize));
+                        const gridY = Math.floor((lat + 90) / (180 / gridSize));
+                        const gridKey = `${gridX},${gridY}`;
+                        
+                        if (!routesByGrid.has(gridKey)) {
+                            routesByGrid.set(gridKey, []);
+                        }
+                        routesByGrid.get(gridKey).push(route);
+                    }
+                });
+                
+                // Take one route from each grid cell
+                const diverseRoutes = [];
+                for (const [gridKey, gridRoutes] of routesByGrid.entries()) {
+                    if (diverseRoutes.length < maxCount) {
+                        // Take the most recent route from this geographic area
+                        const mostRecent = gridRoutes.sort((a, b) => new Date(b.start_date || 0) - new Date(a.start_date || 0))[0];
+                        diverseRoutes.push(mostRecent);
+                    }
+                }
+                
+                console.log(`📍 GEOGRAPHIC DIVERSITY: Selected routes from ${routesByGrid.size} different areas`);
+                return diverseRoutes.slice(0, maxCount);
+                
+            } catch (error) {
+                console.warn('⚠️ Geographic diversity fallback - using simple sampling:', error.message);
+                // Fallback: simple random sampling
+                return routes.slice(0, maxCount);
+            }
+        }
+
+        // OPTION A: Create persistent markers that never get destroyed - only toggle visibility
+        function createOrUpdatePersistentMarkers() {
+            try {
+                // ANIMATION PROTECTION: Never touch markers during animation
+                if (isAnimationInProgress) {
+                    console.log(`🎥 ANIMATION PROTECTION: Skipping marker updates during animation`);
+                    return;
+                }
+                
+                const cameraHeight = viewer.camera.positionCartographic.height;
+                console.log(`🔧 PERSISTENT MARKERS: Camera height ${(cameraHeight / 1000).toFixed(0)}km`);
+                
+                // Skip if camera too close
+                if (cameraHeight < 800000) {
+                    console.log('📷 Camera too close - hiding all markers');
+                    hideAllPersistentMarkers();
+                    return;
+                }
+                
+                // Determine zoom level for appropriate marker density
+                const zoomLevel = cameraHeight > 10000000 ? 'global' : cameraHeight > 5000000 ? 'regional' : 'local';
+                console.log(`🔍 ZOOM LEVEL: ${zoomLevel}`);
+                
+                // Check if we need to create markers for this zoom level
+                if (!ZOOM_LEVEL_MARKERS.has(zoomLevel)) {
+                    console.log(`✨ CREATING: New marker set for ${zoomLevel} level`);
+                    createMarkersForZoomLevel(zoomLevel);
+                }
+                
+                // Show appropriate marker set and hide others
+                showMarkerSetForZoomLevel(zoomLevel);
+                
+            } catch (error) {
+                console.error('❌ Persistent marker error:', error);
+            }
+        }
+
+        // Create markers for a specific zoom level (only called once per zoom level)
+        function createMarkersForZoomLevel(zoomLevel) {
+            console.log(`🏗️ BUILDING: Persistent markers for ${zoomLevel} zoom level`);
+            
+            // Apply filters to get relevant routes
+            const filteredRoutes = sampleRoutes.filter(route => {
+                const matchesTypeFilter = currentFilter === 'all' || route.type === currentFilter;
+                const isZwiftActivity = isZwiftRoute(route);
+                const shouldInclude = matchesTypeFilter && (!isZwiftActivity || showZwiftRoutes);
+                return shouldInclude;
+            });
+            
+            console.log(`📊 FILTERED: ${filteredRoutes.length} routes for ${zoomLevel} markers`);
+            
+            // Performance optimization for zoom level
+            let routesToCluster = filteredRoutes;
+            const maxRoutes = {
+                'global': 50,    // Very few markers for global view
+                'regional': 100, // Medium density for regional 
+                'local': 200     // Higher density for local view
+            };
+            
+            if (filteredRoutes.length > maxRoutes[zoomLevel]) {
+                routesToCluster = filteredRoutes.slice(0, maxRoutes[zoomLevel]);
+                console.log(`⚡ OPTIMIZED: Using ${routesToCluster.length} routes for ${zoomLevel} performance`);
+            }
+            
+            // Create clusters
+            const clusters = clusterRoutes(routesToCluster, zoomLevel === 'global' ? 500 : zoomLevel === 'regional' ? 200 : 100);
+            const markers = new Map();
+            
+            // Create persistent marker entities
+            clusters.forEach((cluster, index) => {
+                if (cluster.routes.length === 0) return;
+                
+                const markerId = `${zoomLevel}_${index}`;
+                const zwiftRoutesInCluster = cluster.routes.filter(r => isZwiftRoute(r));
+                const isZwiftCluster = zwiftRoutesInCluster.length > cluster.routes.length / 2; // Majority Zwift
+                
+                const markerEntity = viewer.entities.add({
+                    id: markerId,
+                    name: `${cluster.routes.length} routes in ${cluster.city}`,
+                    position: Cesium.Cartesian3.fromDegrees(cluster.centerLng, cluster.centerLat, 500),
+                    billboard: {
+                        image: createClusterIcon(cluster.routes.length),
+                        scale: 1.0,
+                        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+                        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                        disableDepthTestDistance: 100000,
+                        show: true // Start visible
+                    }
+                });
+                
+                // Store marker with metadata
+                markers.set(markerId, {
+                    entity: markerEntity,
+                    routes: cluster.routes,
+                    isZwift: isZwiftCluster,
+                    city: cluster.city,
+                    zoomLevel: zoomLevel
+                });
+                
+                // Set up click handler
+                markerEntity.cluster = cluster; // For compatibility with existing click handlers
+            });
+            
+            // Store marker set
+            ZOOM_LEVEL_MARKERS.set(zoomLevel, markers);
+            console.log(`✅ CREATED: ${markers.size} persistent markers for ${zoomLevel} level`);
+        }
+        
+        // Show markers for specific zoom level, hide others
+        function showMarkerSetForZoomLevel(targetZoomLevel) {
+            if (currentMarkerSet === targetZoomLevel) {
+                // Update visibility based on current filters
+                updateMarkerVisibility(targetZoomLevel);
+                return;
+            }
+            
+            console.log(`👁️ SWITCHING: From ${currentMarkerSet} to ${targetZoomLevel} markers`);
+            
+            // Hide all marker sets
+            ZOOM_LEVEL_MARKERS.forEach((markers, zoomLevel) => {
+                markers.forEach(marker => {
+                    marker.entity.show = false;
+                });
+            });
+            
+            // Show target marker set
+            const targetMarkers = ZOOM_LEVEL_MARKERS.get(targetZoomLevel);
+            if (targetMarkers) {
+                updateMarkerVisibility(targetZoomLevel);
+                currentMarkerSet = targetZoomLevel;
+                console.log(`✨ VISIBLE: ${targetMarkers.size} markers for ${targetZoomLevel}`);
+            }
+        }
+        
+        // Update visibility of markers based on current filters (Zwift toggle, etc.)
+        function updateMarkerVisibility(zoomLevel) {
+            const markers = ZOOM_LEVEL_MARKERS.get(zoomLevel);
+            if (!markers) return;
+            
+            let visibleCount = 0;
+            let hiddenCount = 0;
+            
+            markers.forEach(marker => {
+                // Apply current filters
+                const shouldShow = shouldMarkerBeVisible(marker);
+                marker.entity.show = shouldShow;
+                
+                if (shouldShow) visibleCount++;
+                else hiddenCount++;
+            });
+            
+            console.log(`👁️ VISIBILITY: ${visibleCount} shown, ${hiddenCount} hidden in ${zoomLevel} level`);
+        }
+        
+        // Determine if marker should be visible based on current filters
+        function shouldMarkerBeVisible(marker) {
+            // Apply Zwift filter
+            if (marker.isZwift && !showZwiftRoutes) {
+                return false;
+            }
+            
+            // Apply type filter (all routes in cluster should match or be 'all')
+            if (currentFilter !== 'all') {
+                const matchingRoutes = marker.routes.filter(route => route.type === currentFilter);
+                if (matchingRoutes.length === 0) {
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+        
+        // Hide all persistent markers (used when camera too close)
+        function hideAllPersistentMarkers() {
+            ZOOM_LEVEL_MARKERS.forEach(markers => {
+                markers.forEach(marker => {
+                    marker.entity.show = false;
+                });
+            });
+            currentMarkerSet = null;
+        }
+
+        // LEGACY FUNCTION - Replace with persistent marker system
         function createClusterMarkers() {
             try {
                 // ANIMATION PROTECTION: Never touch markers during animation to prevent disappearing
@@ -2128,6 +2371,7 @@
                 return;
             }
             
+            // PERFORMANCE OPTIMIZATION: Smart filtering for large datasets
             const filteredRoutes = sampleRoutes.filter(route => {
                 const matchesTypeFilter = currentFilter === 'all' || route.type === currentFilter;
                 const isZwiftActivity = isZwiftRoute(route);
@@ -2135,13 +2379,29 @@
                 return shouldInclude;
             });
             
+            // CRITICAL PERFORMANCE: If too many routes, intelligently subsample for clustering
+            const MAX_ROUTES_FOR_CLUSTERING = 200; // Prevent system overload
+            let routesForClustering = filteredRoutes;
+            
+            if (filteredRoutes.length > MAX_ROUTES_FOR_CLUSTERING) {
+                console.log(`🔥 PERFORMANCE: ${filteredRoutes.length} routes detected - subsampling to ${MAX_ROUTES_FOR_CLUSTERING} for clustering`);
+                
+                // Smart subsampling: prioritize recent routes and geographic diversity
+                const sortedByDate = [...filteredRoutes].sort((a, b) => new Date(b.start_date || 0) - new Date(a.start_date || 0));
+                const recentRoutes = sortedByDate.slice(0, Math.floor(MAX_ROUTES_FOR_CLUSTERING * 0.7)); // 70% recent
+                const geographicallyDiverseRoutes = getGeographicallyDiverseRoutes(sortedByDate.slice(Math.floor(MAX_ROUTES_FOR_CLUSTERING * 0.7)), Math.floor(MAX_ROUTES_FOR_CLUSTERING * 0.3));
+                
+                routesForClustering = [...recentRoutes, ...geographicallyDiverseRoutes];
+                console.log(`🎯 SMART SAMPLING: ${recentRoutes.length} recent + ${geographicallyDiverseRoutes.length} diverse = ${routesForClustering.length} total`);
+            }
+            
             // DEBUG: Check what's happening with the filters
             const typeFilteredRoutes = sampleRoutes.filter(r => currentFilter === 'all' || r.type === currentFilter);
             console.log(`🔧 DEBUG: Cluster filtering - currentFilter: "${currentFilter}"`);
             console.log(`🔧 DEBUG: Sample route types:`, sampleRoutes.slice(0, 5).map(r => r.type));
-            console.log(`🔧 DEBUG: Total routes: ${sampleRoutes.length}, After type filter: ${typeFilteredRoutes.length}, After Zwift filter: ${filteredRoutes.length}, showZwiftRoutes: ${showZwiftRoutes}`);
+            console.log(`🔧 DEBUG: Total routes: ${sampleRoutes.length}, After type filter: ${typeFilteredRoutes.length}, After Zwift filter: ${filteredRoutes.length}, For clustering: ${routesForClustering.length}, showZwiftRoutes: ${showZwiftRoutes}`);
             
-            const clusters = clusterRoutes(filteredRoutes, 100); // 100km clustering radius
+            const clusters = clusterRoutes(routesForClustering, 100); // 100km clustering radius with performance optimization
             
             clusters.forEach(cluster => {
                 if (cluster.routes.length === 0) return;
@@ -2329,11 +2589,13 @@
             
             // Create initial cluster markers and display all routes
             setTimeout(() => {
-                createClusterMarkers();
+                // NEW ARCHITECTURE: Use persistent markers instead of recreating
+                createOrUpdatePersistentMarkers();
                 setupCameraListeners();
                 
-                // Start with cluster markers only - no automatic route display
+                // Start with persistent markers - no automatic route display
                 // Routes can be viewed by clicking cluster markers or using animation
+                console.log('✅ PERSISTENT MARKER SYSTEM: Initialized successfully');
             }, 1000);
         }
         
@@ -2352,12 +2614,9 @@
                     clearTimeout(window.clusterUpdateTimeout);
                     window.clusterUpdateTimeout = setTimeout(() => {
                         // Double-check: Only recreate markers if we're not in a rapid interaction phase
-                        const now = Date.now();
-                        if (now - lastMarkerCreation >= MARKER_THROTTLE_MS) {
-                            createClusterMarkers();
-                        } else {
-                            console.log(`⏱️ Camera listener: Skipped marker recreation (too recent: ${now - lastMarkerCreation}ms ago)`);
-                        }
+                        // NEW ARCHITECTURE: Update persistent markers instead of recreating
+                        console.log('📷 CAMERA CHANGE: Updating persistent markers');
+                        createOrUpdatePersistentMarkers();
                     }, 1200); // Increased delay to reduce conflicts with button interactions
                 }
             });
@@ -4184,6 +4443,12 @@
                     updateStats();
                     updatePermanentRouteVisibility(); // Update permanent route visibility
                     
+                    // NEW ARCHITECTURE: Update marker visibility for new filter
+                    console.log(`🔄 FILTER CHANGE: Updating markers for "${currentFilter}" filter`);
+                    if (currentMarkerSet) {
+                        updateMarkerVisibility(currentMarkerSet);
+                    }
+                    
                     // Clear active route
                     routeEntities.forEach(entity => viewer.entities.remove(entity));
                     routeEntities = [];
@@ -4235,11 +4500,20 @@
                     updatePermanentRouteVisibility();
                     populateRoutesList();
                     
-                    // CRITICAL: Refresh cluster markers to respect Zwift filtering (with small delay to avoid throttling)
-                    setTimeout(() => {
-                        console.log('🔄 ZWIFT TOGGLE: Refreshing cluster markers after Zwift visibility change');
-                        createClusterMarkers();
-                    }, 100); // Small delay to ensure throttling doesn't block
+                    // NEW ARCHITECTURE: Update marker visibility instead of recreating
+                    console.log('🏠 ZWIFT TOGGLE: Updating marker visibility');
+                    
+                    // Update visibility for all zoom levels instantly
+                    ZOOM_LEVEL_MARKERS.forEach((markers, zoomLevel) => {
+                        updateMarkerVisibility(zoomLevel);
+                    });
+                    
+                    // If no current marker set is visible, trigger persistent marker update
+                    if (currentMarkerSet) {
+                        updateMarkerVisibility(currentMarkerSet);
+                    } else {
+                        createOrUpdatePersistentMarkers();
+                    }
                     
                     console.log(`🏠 Zwift routes ${showZwiftRoutes ? 'SHOWN' : 'HIDDEN'} - Button updated`);
                     
