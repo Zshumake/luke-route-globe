@@ -5762,10 +5762,17 @@
             });
             
             // Draw route line on globe
+            // Convert coordinates array to flat longitude, latitude array
+            const flatCoordinates = [];
+            route.coordinates.forEach(coord => {
+                flatCoordinates.push(coord[0]); // longitude
+                flatCoordinates.push(coord[1]); // latitude
+            });
+            
             const routeEntity = viewer.entities.add({
                 name: `discovery-route-${route.id}`,
                 polyline: {
-                    positions: Cesium.Cartesian3.fromDegreesArray(route.coordinates.flat()),
+                    positions: Cesium.Cartesian3.fromDegreesArray(flatCoordinates),
                     width: 8,
                     material: route.source === 'eurovelo' ? Cesium.Color.RED : Cesium.Color.DODGERBLUE,
                     clampToGround: true,
